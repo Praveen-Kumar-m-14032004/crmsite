@@ -1,0 +1,15 @@
+{
+  "name": "permit-declaration",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Permit Declaration - CRM, invoicing and GST billing",
+  "scripts": {
+    "install:all": "npm install && npm --prefix server install && npm --prefix client install",
+    "dev": "concurrently -n api,web -c magenta,cyan \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "start": "concurrently -n api,web -c magenta,cyan \"npm --prefix server start\" \"npm --prefix client run dev\"",
+    "build": "npm --prefix client run build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  }
+}

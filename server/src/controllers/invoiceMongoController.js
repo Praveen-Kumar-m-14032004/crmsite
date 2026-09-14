@@ -179,9 +179,11 @@ function validatePayload(body) {
   const missing = [];
   if (!String(invoice_no || '').trim()) missing.push('Invoice number');
   if (!String(invoice_date || '').trim()) missing.push('Invoice date');
-  if (!numericId(customer_id)) missing.push('Company/Customer');
+  const custId = numericId(customer_id);
+  const companyName = String(body.company_name || customer_id || '').trim();
+  if (!custId && !companyName) missing.push('Company/Customer');
   if (!Array.isArray(items) || !items.length) missing.push('At least one line item');
-  if (missing.length) return `${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} required. Please select a valid company/customer.`;
+  if (missing.length) return `${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} required.`;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(invoice_date))) return 'Invoice date must be a valid date (YYYY-MM-DD)';
   if (items.length > MAX_ITEMS) return `An invoice cannot have more than ${MAX_ITEMS} line items`;
   for (let index = 0; index < items.length; index += 1) {
@@ -200,22 +202,36 @@ function validatePayload(body) {
 }
 
 async function isGstBill(items) {
-  const products = await collection('products').find({ id: { $in: items.map((item) => numericId(item.product_id)) } }).toArray();
+  const products = await collection('products').find({ id: { $in: items.map((item) => numericId(item.product_id)).filter(Boolean) } }).toArray();
   return products.some((product) => product.productname === 'GST');
 }
 
 async function itemDocuments(invoiceId, items) {
-  return Promise.all(items.map(async (item) => ({
-    id: await nextId('invoice_items'),
-    invoice_id: invoiceId,
-    product_id: numericId(item.product_id),
-    description: item.description || null,
-    rate: Number(item.rate),
-    quantity: Number(item.quantity),
-    total: lineTotal(item),
-    created_at: now(),
-    updated_at: now(),
-  })));
+  return Promise.all(items.map(async (item) => {
+    let pId = numericId(item.product_id);
+    if (!pId && item.product_id) {
+      const pName = String(item.product_id).trim();
+      let p = await collection('products').findOne({ productname: { $regex: `^${pName}$`, $options: 'i' } });
+      if (!p) {
+        pId = await nextId('products');
+        p = { id: pId, productname: pName, created_at: now() };
+        await collection('products').insertOne(p);
+      } else {
+        pId = p.id;
+      }
+    }
+    return {
+      id: await nextId('invoice_items'),
+      invoice_id: invoiceId,
+      product_id: pId || 0,
+      description: item.description || null,
+      rate: Number(item.rate),
+      quantity: Number(item.quantity),
+      total: lineTotal(item),
+      created_at: now(),
+      updated_at: now(),
+    };
+  }));
 }
 
 async function create(req, res) {
@@ -226,15 +242,29 @@ async function create(req, res) {
   const id = await nextId('invoices');
 
   try {
-    const customer = await collection('customers').findOne({ id: numericId(customer_id) });
-    if (!customer) return res.status(400).json({ message: 'Selected company/customer was not found. Please choose an existing customer.' });
+    let custId = numericId(customer_id);
+    let customer = custId ? await collection('customers').findOne({ id: custId }) : null;
+    if (!customer && (req.body.company_name || customer_id)) {
+      const name = String(req.body.company_name || customer_id).trim();
+      if (name) {
+        let existing = await collection('customers').findOne({ companyname: { $regex: `^${name}$`, $options: 'i' } });
+        if (!existing) {
+          custId = await nextId('customers');
+          existing = { id: custId, companyname: name, person_incharge: null, mobile_no: customer_contact || null, email: null, address: null, created_at: now(), updated_at: now() };
+          await collection('customers').insertOne(existing);
+        }
+        customer = existing;
+        custId = existing.id;
+      }
+    }
+    if (!customer) return res.status(400).json({ message: 'Selected company/customer was not found. Please choose or enter an existing customer.' });
 
     const gstBill = await isGstBill(items);
     await collection('invoices').insertOne({
       id,
       invoice_no: String(invoice_no).trim(),
       invoice_date,
-      customer_id: numericId(customer_id),
+      customer_id: custId,
       customer_contact: customer_contact || null,
       sub_amount: subAmount,
       paid_amount: Number(paid_amount || 0),
@@ -271,9 +301,23 @@ async function update(req, res) {
     if (expected_version !== undefined && Number(expected_version) !== existing.version) {
       return res.status(409).json({ message: 'This invoice was changed by someone else while you were editing. Reopen it to see the current version.' });
     }
-    if (!await collection('customers').findOne({ id: numericId(customer_id) })) {
-      return res.status(400).json({ message: 'Customer not found' });
+    let custId = numericId(customer_id);
+    let customer = custId ? await collection('customers').findOne({ id: custId }) : null;
+    if (!customer && (req.body.company_name || customer_id)) {
+      const name = String(req.body.company_name || customer_id).trim();
+      if (name) {
+        let match = await collection('customers').findOne({ companyname: { $regex: `^${name}$`, $options: 'i' } });
+        if (!match) {
+          custId = await nextId('customers');
+          match = { id: custId, companyname: name, person_incharge: null, mobile_no: customer_contact || null, email: null, address: null, created_at: now(), updated_at: now() };
+          await collection('customers').insertOne(match);
+        }
+        customer = match;
+        custId = match.id;
+      }
     }
+    if (!customer) return res.status(400).json({ message: 'Customer not found' });
+
     const gstBill = await isGstBill(items);
     await collection('invoices').updateOne(
       { id },
@@ -281,7 +325,7 @@ async function update(req, res) {
         $set: {
           invoice_no: String(invoice_no).trim(),
           invoice_date,
-          customer_id: numericId(customer_id),
+          customer_id: custId,
           customer_contact: customer_contact || null,
           sub_amount: subAmount,
           paid_amount: Number(paid_amount || 0),

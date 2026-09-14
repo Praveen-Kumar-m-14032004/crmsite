@@ -8,6 +8,7 @@ export default function SearchableSelect({
   placeholder = 'Search…',
   required = false,
   disabled = false,
+  allowCustom = true,
 }) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -34,42 +35,49 @@ export default function SearchableSelect({
     setHighlightIdx(0);
   }, [filtered.length]);
 
-  // Keep query synced with selected option when closed
+  // Keep query synced with selected option or custom value when closed
   useEffect(() => {
     if (!open) {
-      setQuery(selected?.label || '');
+      if (selected) {
+        setQuery(selected.label);
+      } else if (value) {
+        setQuery(String(value));
+      } else {
+        setQuery('');
+      }
     }
-  }, [selected, open]);
+  }, [selected, value, open]);
 
   const handleSelect = (val) => {
     onChange(val);
     const opt = options.find((o) => String(o.value) === String(val));
-    setQuery(opt?.label || '');
+    setQuery(opt?.label || String(val) || '');
     setOpen(false);
   };
 
   const commitSelection = (text) => {
-    const q = (text !== undefined ? text : query).trim().toLowerCase();
+    const q = (text !== undefined ? text : query).trim();
     if (!q) {
       onChange('');
       setQuery('');
       setOpen(false);
       return;
     }
+    const qLower = q.toLowerCase();
     // 1. Exact label match (case-insensitive)
-    const exact = options.find((o) => o.label.trim().toLowerCase() === q);
+    const exact = options.find((o) => o.label.trim().toLowerCase() === qLower);
     if (exact) {
       handleSelect(exact.value);
       return;
     }
     // 2. Exact value match (e.g. ID)
-    const exactVal = options.find((o) => String(o.value).toLowerCase() === q);
+    const exactVal = options.find((o) => String(o.value).toLowerCase() === qLower);
     if (exactVal) {
       handleSelect(exactVal.value);
       return;
     }
     // 3. Prefix match
-    const prefix = options.find((o) => o.label.trim().toLowerCase().startsWith(q));
+    const prefix = options.find((o) => o.label.trim().toLowerCase().startsWith(qLower));
     if (prefix) {
       handleSelect(prefix.value);
       return;
@@ -80,7 +88,12 @@ export default function SearchableSelect({
       handleSelect(pick.value);
       return;
     }
-    // 5. If no match at all, revert to previously selected or clear
+    // 5. Allow custom typed value
+    if (allowCustom) {
+      handleSelect(q);
+      return;
+    }
+    // 6. If no match at all and not allowCustom, revert to previously selected or clear
     if (selected) {
       setQuery(selected.label);
     } else {
@@ -100,7 +113,7 @@ export default function SearchableSelect({
     };
     document.addEventListener('mousedown', handleDocClick);
     return () => document.removeEventListener('mousedown', handleDocClick);
-  }, [open, query, options, filtered, selected, highlightIdx]);
+  }, [open, query, options, filtered, selected, highlightIdx, allowCustom]);
 
   const handleClear = (e) => {
     e.stopPropagation();
@@ -133,13 +146,15 @@ export default function SearchableSelect({
       }
     } else if (e.key === 'Escape') {
       setOpen(false);
-      setQuery(selected?.label || '');
+      setQuery(selected?.label || (value ? String(value) : ''));
     } else if (e.key === 'Tab') {
       if (open) {
         commitSelection();
       }
     }
   };
+
+  const showCustomOption = allowCustom && query.trim() && !options.some((o) => o.label.toLowerCase() === query.trim().toLowerCase());
 
   return (
     <div className="ss-wrap" ref={wrapRef}>
@@ -150,7 +165,7 @@ export default function SearchableSelect({
           type="text"
           autoComplete="off"
           placeholder={placeholder}
-          value={open ? query : (selected?.label || '')}
+          value={open ? query : (selected?.label || (value ? String(value) : ''))}
           disabled={disabled}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -158,14 +173,14 @@ export default function SearchableSelect({
           }}
           onFocus={() => {
             setOpen(true);
-            setQuery(selected?.label || '');
+            setQuery(selected?.label || (value ? String(value) : ''));
             inputRef.current?.select();
           }}
           onKeyDown={handleKeyDown}
           required={required && !value}
         />
         <div className="ss-actions">
-          {value && !disabled && (
+          {Boolean(value || query) && !disabled && (
             <button type="button" className="ss-clear" onClick={handleClear} tabIndex={-1} title="Clear">
               ×
             </button>
@@ -181,7 +196,7 @@ export default function SearchableSelect({
                 commitSelection();
               } else {
                 setOpen(true);
-                setQuery(selected?.label || '');
+                setQuery(selected?.label || (value ? String(value) : ''));
                 inputRef.current?.focus();
               }
             }}
@@ -194,31 +209,49 @@ export default function SearchableSelect({
       </div>
       {open && (
         <div className="ss-dropdown" role="listbox">
-          {filtered.length === 0 ? (
+          {filtered.length === 0 && !showCustomOption ? (
             <div className="ss-empty">No matches found</div>
           ) : (
-            filtered.map((o, idx) => {
-              const isSelected = String(o.value) === String(value);
-              const isHighlighted = idx === highlightIdx;
-              return (
+            <>
+              {filtered.map((o, idx) => {
+                const isSelected = String(o.value) === String(value);
+                const isHighlighted = idx === highlightIdx;
+                return (
+                  <div
+                    key={String(o.value) + idx}
+                    className={`ss-option${isSelected ? ' ss-active' : ''}${isHighlighted ? ' ss-highlighted' : ''}`}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleSelect(o.value);
+                    }}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleSelect(o.value);
+                    }}
+                    onMouseEnter={() => setHighlightIdx(idx)}
+                  >
+                    <div className="ss-option-label">{o.label}</div>
+                    {o.sub && <div className="ss-option-sub">{o.sub}</div>}
+                  </div>
+                );
+              })}
+              {showCustomOption && (
                 <div
-                  key={String(o.value) + idx}
-                  className={`ss-option${isSelected ? ' ss-active' : ''}${isHighlighted ? ' ss-highlighted' : ''}`}
+                  className="ss-option ss-option-custom"
+                  style={{ borderTop: '1px solid var(--line-soft)', color: 'var(--purple-700)', fontWeight: 600 }}
                   onMouseDown={(e) => {
                     e.preventDefault();
-                    handleSelect(o.value);
+                    handleSelect(query.trim());
                   }}
                   onClick={(e) => {
                     e.preventDefault();
-                    handleSelect(o.value);
+                    handleSelect(query.trim());
                   }}
-                  onMouseEnter={() => setHighlightIdx(idx)}
                 >
-                  <div className="ss-option-label">{o.label}</div>
-                  {o.sub && <div className="ss-option-sub">{o.sub}</div>}
+                  <div className="ss-option-label">➕ Use “{query.trim()}”</div>
                 </div>
-              );
-            })
+              )}
+            </>
           )}
         </div>
       )}

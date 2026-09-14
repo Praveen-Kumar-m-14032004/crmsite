@@ -82,8 +82,13 @@ export default function AddInvoice() {
 
   const handleCustomerChange = (value) => {
     setCustomerId(value);
-    const cust = customers.find((c) => String(c.id) === String(value));
-    setCustomerContact(cust?.mobile_no || '');
+    const trimmedVal = String(value).trim().toLowerCase();
+    const cust = customers.find(
+      (c) => String(c.id) === String(value) || c.companyname?.trim().toLowerCase() === trimmedVal
+    );
+    if (cust) {
+      setCustomerContact(cust.mobile_no || '');
+    }
   };
 
   const companyOptions = useMemo(
@@ -125,52 +130,84 @@ export default function AddInvoice() {
     const activeItems = items.filter((it) => it.product_id || it.description?.trim() || it.rate !== '');
     const itemsToSave = activeItems.length ? activeItems : items;
 
-    let selectedCustId = customerId;
-    if (!selectedCustId || !Number(selectedCustId)) {
-      const match = customers.find((c) =>
-        String(c.id) === String(customerId) ||
-        c.companyname?.toLowerCase().trim() === String(customerId).toLowerCase().trim()
-      );
-      if (match) {
-        selectedCustId = String(match.id);
-        setCustomerId(selectedCustId);
-      }
-    }
-
     if (!invoiceNo.trim()) { setError('Invoice number is required.'); return; }
     if (!invoiceDate) { setError('Invoice date is required.'); return; }
-    if (!selectedCustId || !Number(selectedCustId)) { setError('Please select a company/customer from the dropdown.'); return; }
+    if (!customerId || !String(customerId).trim()) { setError('Please enter or select a company/customer.'); return; }
     if (!activeItems.length) { setError('Please add at least one line item.'); return; }
     if (itemsToSave.some((it) => !it.product_id)) { setError('Every line item needs a product selected.'); return; }
     if (itemsToSave.some((it) => it.rate === '' || Number(it.rate) < 0)) { setError('Every line item needs a valid rate.'); return; }
     if (itemsToSave.some((it) => !Number(it.quantity) || Number(it.quantity) <= 0)) { setError('Quantity must be greater than zero.'); return; }
     if (paid > subAmount) { setError('Paid amount cannot be more than the sub amount.'); return; }
 
-    const autoPaymentStatus = paid >= subAmount && subAmount > 0
-      ? 'Full Payment'
-      : (paid > 0 ? 'Partial Payment' : 'Due');
-
     setSaving(true);
-    const payload = {
-      invoice_no: invoiceNo.trim(),
-      invoice_date: invoiceDate,
-      customer_id: Number(selectedCustId),
-      customer_contact: customerContact,
-      items: itemsToSave.map((it) => ({
-        product_id: Number(it.product_id),
-        description: it.description,
-        rate: Number(it.rate),
-        quantity: Number(it.quantity),
-      })),
-      paid_amount: paid,
-      payment_type: null,
-      payment_status: autoPaymentStatus,
-      // Preserve the stored workflow status when editing; new invoices start Pending.
-      status: isEdit ? invoiceStatus : 'Pending',
-      ...(isEdit && loadedVersion !== null ? { expected_version: loadedVersion } : {}),
-    };
-
     try {
+      // 1. Resolve or dynamically create customer if needed
+      let finalCustId = null;
+      const trimmedCust = String(customerId).trim();
+      const existingCust = customers.find(
+        (c) => String(c.id) === trimmedCust ||
+               c.companyname?.toLowerCase().trim() === trimmedCust.toLowerCase()
+      );
+      if (existingCust) {
+        finalCustId = existingCust.id;
+      } else if (Number(trimmedCust)) {
+        finalCustId = Number(trimmedCust);
+      } else {
+        // Create new customer on the fly
+        const createCustRes = await customersApi.create({
+          companyname: trimmedCust,
+          mobile_no: customerContact || null,
+        });
+        finalCustId = createCustRes.data.id;
+        const newCustObj = { id: finalCustId, companyname: trimmedCust, mobile_no: customerContact };
+        setCustomers((prev) => [...prev, newCustObj]);
+      }
+
+      // 2. Resolve or dynamically create products for items
+      const resolvedItems = [];
+      for (const it of itemsToSave) {
+        let pId = null;
+        const trimmedProd = String(it.product_id).trim();
+        const existingProd = products.find(
+          (p) => String(p.id) === trimmedProd ||
+                 p.productname?.toLowerCase().trim() === trimmedProd.toLowerCase()
+        );
+        if (existingProd) {
+          pId = existingProd.id;
+        } else if (Number(trimmedProd)) {
+          pId = Number(trimmedProd);
+        } else {
+          // Create new product on the fly
+          const createProdRes = await productsApi.create({ productname: trimmedProd });
+          pId = createProdRes.data.id;
+          const newProdObj = { id: pId, productname: trimmedProd };
+          setProducts((prev) => [...prev, newProdObj]);
+        }
+        resolvedItems.push({
+          product_id: Number(pId),
+          description: it.description || '',
+          rate: Number(it.rate),
+          quantity: Number(it.quantity),
+        });
+      }
+
+      const autoPaymentStatus = paid >= subAmount && subAmount > 0
+        ? 'Full Payment'
+        : (paid > 0 ? 'Partial Payment' : 'Due');
+
+      const payload = {
+        invoice_no: invoiceNo.trim(),
+        invoice_date: invoiceDate,
+        customer_id: Number(finalCustId),
+        customer_contact: customerContact,
+        items: resolvedItems,
+        paid_amount: paid,
+        payment_type: null,
+        payment_status: autoPaymentStatus,
+        status: isEdit ? invoiceStatus : 'Pending',
+        ...(isEdit && loadedVersion !== null ? { expected_version: loadedVersion } : {}),
+      };
+
       if (isEdit) {
         await invoicesApi.update(id, payload);
         toast.success(`Invoice #${payload.invoice_no} updated`);

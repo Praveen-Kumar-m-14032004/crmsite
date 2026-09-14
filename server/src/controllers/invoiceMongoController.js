@@ -55,7 +55,12 @@ const lineTotal = (item) => round2(Number(item.rate) * Number(item.quantity));
 const computeTotals = (items, paid) => { const subAmount = round2(items.reduce((sum, item) => sum + lineTotal(item), 0)); return { subAmount, dueAmount: round2(Math.max(subAmount - Number(paid || 0), 0)) }; };
 function validatePayload(body) {
   const { invoice_no, invoice_date, customer_id, items, paid_amount } = body;
-  if (!invoice_no || !invoice_date || !customer_id || !Array.isArray(items) || !items.length) return 'invoice_no, invoice_date, customer_id and at least one item are required';
+  const missing = [];
+  if (!String(invoice_no || '').trim()) missing.push('invoice_no');
+  if (!String(invoice_date || '').trim()) missing.push('invoice_date');
+  if (!numericId(customer_id)) missing.push('customer_id');
+  if (!Array.isArray(items) || !items.length) missing.push('at least one item');
+  if (missing.length) return `${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} required`;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(invoice_date))) return 'invoice_date must be a valid date (YYYY-MM-DD)';
   if (items.length > MAX_ITEMS) return `An invoice cannot have more than ${MAX_ITEMS} line items`;
   for (let index = 0; index < items.length; index += 1) { const rate = Number(items[index].rate); const quantity = Number(items[index].quantity); if (!items[index].product_id) return `Line ${index + 1}: a product must be selected`; if (!Number.isFinite(rate) || rate < 0 || rate > MAX_AMOUNT) return `Line ${index + 1}: rate must be a number between 0 and ${MAX_AMOUNT}`; if (!Number.isFinite(quantity) || quantity <= 0 || quantity > MAX_AMOUNT) return `Line ${index + 1}: quantity must be greater than 0`; }
@@ -66,8 +71,8 @@ async function itemDocuments(invoiceId, items, session) { const docs = items.map
 
 async function create(req, res) {
   const invalid = validatePayload(req.body); if (invalid) return res.status(400).json({ message: invalid });
-  const { invoice_no, invoice_date, customer_id, customer_contact, items, paid_amount, payment_type, payment_status, status } = req.body; const { subAmount, dueAmount } = computeTotals(items, paid_amount); const session = getClient().startSession();
-  try { const id = await nextId('invoices', session); await session.withTransaction(async () => { if (!await collection('customers').findOne({ id: numericId(customer_id) }, { session })) throw Object.assign(new Error('Customer not found'), { status: 400 }); const gstBill = await isGstBill(items, session); await collection('invoices').insertOne({ id, invoice_no: String(invoice_no), invoice_date, customer_id: numericId(customer_id), customer_contact: customer_contact || null, sub_amount: subAmount, paid_amount: Number(paid_amount || 0), due_amount: dueAmount, payment_type: payment_type || null, payment_status: payment_status || null, status: status || 'Pending', is_gst_bill: gstBill ? 1 : 0, version: 0, created_at: now(), updated_at: now() }, { session }); await collection('invoice_items').insertMany(await itemDocuments(id, items, session), { session }); }); invalidateTotal(); res.status(201).json({ id }); } catch (error) { if (isDuplicateError(error)) return res.status(409).json({ message: 'Invoice number already exists' }); throw error; } finally { await session.endSession(); }
+  const { invoice_no, invoice_date, customer_id, customer_contact, items, paid_amount, payment_type, payment_status, status } = req.body; const { subAmount, dueAmount } = computeTotals(items, paid_amount); const session = getClient().startSession(); let id;
+  try { await session.withTransaction(async () => { id = await nextId('invoices', session); if (!await collection('customers').findOne({ id: numericId(customer_id) }, { session })) throw Object.assign(new Error('Customer not found'), { status: 400 }); const gstBill = await isGstBill(items, session); await collection('invoices').insertOne({ id, invoice_no: String(invoice_no).trim(), invoice_date, customer_id: numericId(customer_id), customer_contact: customer_contact || null, sub_amount: subAmount, paid_amount: Number(paid_amount || 0), due_amount: dueAmount, payment_type: payment_type || null, payment_status: payment_status || null, status: status || 'Pending', is_gst_bill: gstBill ? 1 : 0, version: 0, created_at: now(), updated_at: now() }, { session }); await collection('invoice_items').insertMany(await itemDocuments(id, items, session), { session }); }); invalidateTotal(); res.status(201).json({ id }); } catch (error) { if (isDuplicateError(error)) return res.status(409).json({ message: 'Invoice number already exists' }); throw error; } finally { await session.endSession(); }
 }
 
 async function update(req, res) {

@@ -123,6 +123,8 @@ export default function AddInvoice() {
     e.preventDefault();
     setError('');
 
+    if (!invoiceNo.trim()) { setError('Invoice number is required.'); return; }
+    if (!invoiceDate) { setError('Invoice date is required.'); return; }
     if (!customerId) { setError('Please select a company.'); return; }
     if (items.some((it) => !it.product_id)) { setError('Every line item needs a product selected.'); return; }
     if (items.some((it) => it.rate === '' || Number(it.rate) < 0)) { setError('Every line item needs a valid rate.'); return; }

@@ -31,10 +31,10 @@ const fonts = {
 
 const printer = new PdfPrinter(fonts);
 
-const PURPLE = '#5b2a86';
-const INK = '#1f2430';
-const MUTED = '#6b7280';
-const RULE = '#e3e5ec';
+const PURPLE = '#6e2476';
+const INK = '#343a40';
+const MUTED = '#717684';
+const RULE = '#e2e4ea';
 
 function money(value) {
   return Number(value || 0).toFixed(2);
@@ -57,7 +57,7 @@ function buildPdf(docDefinition) {
     try {
       const doc = printer.createPdfKitDocument({
         pageSize: 'A4',
-        pageMargins: [48, 42, 48, 48],
+        pageMargins: [45, 38, 45, 42],
         ...rest,
         defaultStyle: { font: 'Roboto', fontSize: 9.5, color: INK, ...defaultStyle },
       });
@@ -76,7 +76,7 @@ function logoBlock() {
   if (logoBase64) {
     return {
       image: logoBase64,
-      width: 175,
+      width: 185,
     };
   }
   return {
@@ -112,7 +112,7 @@ function payNowBadge() {
   if (paynowBase64) {
     return {
       image: paynowBase64,
-      width: 140,
+      width: 145,
       margin: [0, 5, 0, 4],
     };
   }
@@ -177,38 +177,38 @@ function invoicePdfDefinition(invoice, items, settings) {
             alignment: 'right',
           },
         ],
-        margin: [0, 0, 0, manyItems ? 16 : 28],
+        margin: [0, 0, 0, manyItems ? 14 : 24],
       },
 
       // ---- From & To Section ----
       {
         columns: [
-          { width: '6%', text: '' },
+          { width: '4%', text: '' },
           {
-            width: '45%',
+            width: '46%',
             stack: [
               { text: 'From:', style: 'partyLabel' },
               ...fromLines,
             ],
           },
           {
-            width: '49%',
+            width: '50%',
             stack: [
               { text: `To: ${invoice.companyname || ''}`, style: 'partyLabelBold' },
-              { text: `Name: ${invoice.person_incharge || ''}`, style: 'partyName', margin: [0, 8, 0, 0] },
+              { text: `Name: ${invoice.person_incharge || ''}`, style: 'partyName', margin: [0, 8, 0, 2] },
               { text: `Address: ${invoice.customer_address || ''}`, style: 'partyLine' },
               { text: `Phone: ${invoice.customer_mobile || invoice.customer_contact || ''}`, style: 'partyLine' },
             ],
           },
         ],
-        margin: [0, 0, 0, manyItems ? 18 : 32],
+        margin: [0, 0, 0, manyItems ? 16 : 28],
       },
 
       // ---- Line items table ----
       {
         table: {
           headerRows: 1,
-          widths: [18, '*', 95, 68, 32, 58],
+          widths: [20, '*', 100, 76, 34, 64],
           body: [
             [
               { text: '#', style: 'th' },
@@ -225,8 +225,8 @@ function invoicePdfDefinition(invoice, items, settings) {
           hLineWidth: () => 0.7,
           vLineWidth: () => 0,
           hLineColor: () => RULE,
-          paddingTop: () => (manyItems ? 4.5 : 8),
-          paddingBottom: () => (manyItems ? 4.5 : 8),
+          paddingTop: () => (manyItems ? 4.5 : 7.5),
+          paddingBottom: () => (manyItems ? 4.5 : 7.5),
           paddingLeft: () => 0,
           paddingRight: (i) => (i === 5 ? 0 : 8),
         },
@@ -239,7 +239,7 @@ function invoicePdfDefinition(invoice, items, settings) {
             width: '56%',
             stack: [
               { text: 'All Cheques should be crossed and made payable to', style: 'payLead' },
-              { text: (settings.company_name || '').toUpperCase(), style: 'payee' },
+              { text: (settings.company_name || 'CHOLA LOGISTICS PTE LTD').toUpperCase(), style: 'payee' },
               payNowBadge(),
               { text: `UEN: ${uenNumber}`, style: 'uen' },
             ],
@@ -247,7 +247,7 @@ function invoicePdfDefinition(invoice, items, settings) {
           {
             width: '44%',
             stack: [
-              { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 228, y2: 0, lineWidth: 0.8, lineColor: '#1a1e28' }] },
+              { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 215, y2: 0, lineWidth: 1, lineColor: PURPLE }] },
               {
                 columns: [
                   { text: 'Total', style: 'totalLabel' },
@@ -256,10 +256,10 @@ function invoicePdfDefinition(invoice, items, settings) {
                 margin: [0, 10, 0, 0],
               },
             ],
-            margin: [0, 28, 0, 0],
+            margin: [0, 24, 0, 0],
           },
         ],
-        margin: [0, manyItems ? 22 : 60, 0, 0],
+        margin: [0, manyItems ? 18 : 45, 0, 0],
       },
     ],
 
@@ -268,7 +268,7 @@ function invoicePdfDefinition(invoice, items, settings) {
       dateLine: { fontSize: 11.5, color: INK, margin: [0, 2, 0, 3] },
       invoiceNo: { fontSize: 16.5, bold: true, color: INK },
 
-      partyLabel: { fontSize: 9.5, color: INK },
+      partyLabel: { fontSize: 9.5, color: INK, bold: true },
       partyLabelBold: { fontSize: 9.5, bold: true, color: INK },
       partyName: { fontSize: 11, bold: true, color: INK, margin: [0, 8, 0, 2], lineHeight: 1.25 },
       partyLine: { fontSize: 9, color: INK, lineHeight: 1.35 },
@@ -277,12 +277,11 @@ function invoicePdfDefinition(invoice, items, settings) {
       cell: { fontSize: 9, color: INK, lineHeight: 1.25 },
 
       payLead: { fontSize: 9, color: INK },
-      payee: { fontSize: 12, bold: true, color: INK, margin: [0, 3, 0, 0] },
-      payNow: { fontSize: 14, bold: true, color: PURPLE },
-      uen: { fontSize: 11, bold: true, color: INK },
+      payee: { fontSize: 12.5, bold: true, color: INK, margin: [0, 3, 0, 0] },
+      uen: { fontSize: 11, bold: true, color: INK, margin: [0, 2, 0, 0] },
 
-      totalLabel: { fontSize: 10, color: INK },
-      totalValue: { fontSize: 10.5, bold: true, color: INK },
+      totalLabel: { fontSize: 10.5, color: INK },
+      totalValue: { fontSize: 11, bold: true, color: INK },
     },
   };
 }

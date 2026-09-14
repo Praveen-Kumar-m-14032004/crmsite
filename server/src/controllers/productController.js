@@ -1,51 +1,47 @@
-const pool = require('../config/db');
+const { collection, nextId, now, numericId } = require('../utils/mongo');
 
 async function list(req, res) {
   const { search = '', page = 1, limit = 10 } = req.query;
   const pageNum = Math.max(parseInt(page, 10) || 1, 1);
   const limitNum = Math.max(parseInt(limit, 10) || 10, 1);
   const offset = (pageNum - 1) * limitNum;
-  const searchTerm = `%${search}%`;
+  const filter = search ? { productname: { $regex: search, $options: 'i' } } : {};
+  const [rows, total] = await Promise.all([
+    collection('products').find(filter).sort({ created_at: -1, id: -1 }).skip(offset).limit(limitNum).toArray(),
+    collection('products').countDocuments(filter),
+  ]);
 
-  const [rows] = await pool.query(
-    `SELECT * FROM products WHERE productname LIKE ?
-     ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-    [searchTerm, limitNum, offset]
-  );
-  const [countRows] = await pool.query(
-    `SELECT COUNT(*) AS total FROM products WHERE productname LIKE ?`,
-    [searchTerm]
-  );
-
-  res.json({ data: rows, total: countRows[0].total, page: pageNum, limit: limitNum });
+  res.json({ data: rows, total, page: pageNum, limit: limitNum });
 }
 
 async function getOne(req, res) {
-  const [rows] = await pool.query('SELECT * FROM products WHERE id = ?', [req.params.id]);
-  if (!rows[0]) return res.status(404).json({ message: 'Product not found' });
-  res.json(rows[0]);
+  const product = await collection('products').findOne({ id: numericId(req.params.id) });
+  if (!product) return res.status(404).json({ message: 'Product not found' });
+  res.json(product);
 }
 
 async function create(req, res) {
   const { productname } = req.body;
   if (!productname) return res.status(400).json({ message: 'Product name is required' });
-  const [result] = await pool.query('INSERT INTO products (productname) VALUES (?)', [productname]);
-  const [rows] = await pool.query('SELECT * FROM products WHERE id = ?', [result.insertId]);
-  res.status(201).json(rows[0]);
+  const product = { id: await nextId('products'), productname, created_at: now() };
+  await collection('products').insertOne(product);
+  res.status(201).json(product);
 }
 
 async function update(req, res) {
   const { productname } = req.body;
   if (!productname) return res.status(400).json({ message: 'Product name is required' });
-  await pool.query('UPDATE products SET productname = ? WHERE id = ?', [productname, req.params.id]);
-  const [rows] = await pool.query('SELECT * FROM products WHERE id = ?', [req.params.id]);
-  if (!rows[0]) return res.status(404).json({ message: 'Product not found' });
-  res.json(rows[0]);
+  const result = await collection('products').findOneAndUpdate({ id: numericId(req.params.id) }, { $set: { productname } }, { returnDocument: 'after' });
+  const product = result?.value || result;
+  if (!product || product.id === undefined) return res.status(404).json({ message: 'Product not found' });
+  res.json(product);
 }
 
 async function remove(req, res) {
-  const [result] = await pool.query('DELETE FROM products WHERE id = ?', [req.params.id]);
-  if (result.affectedRows === 0) return res.status(404).json({ message: 'Product not found' });
+  const id = numericId(req.params.id);
+  if (await collection('invoice_items').findOne({ product_id: id })) return res.status(409).json({ message: 'This record is still used by existing invoices and cannot be deleted.' });
+  const result = await collection('products').deleteOne({ id });
+  if (!result.deletedCount) return res.status(404).json({ message: 'Product not found' });
   res.json({ message: 'Product deleted' });
 }
 

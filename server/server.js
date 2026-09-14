@@ -9,7 +9,7 @@ if (!process.env.JWT_SECRET) {
   process.env.JWT_SECRET = 'local-development-jwt-secret';
 }
 
-const pool = require('./src/config/db');
+const { connect, getDb, close, mongoDatabaseName } = require('./src/config/db');
 const authRoutes = require('./src/routes/auth');
 const dashboardRoutes = require('./src/routes/dashboard');
 const customerRoutes = require('./src/routes/customers');
@@ -37,7 +37,14 @@ app.use('/api/permissions', permissionRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/company-settings', settingsRoutes);
 
-app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
+app.get('/api/health', async (_req, res) => {
+  try {
+    await getDb().command({ ping: 1 });
+    res.json({ status: 'ok' });
+  } catch (_err) {
+    res.status(503).json({ status: 'error', message: 'Database unavailable' });
+  }
+});
 
 app.use('/api', (_req, res) => res.status(404).json({ message: 'Endpoint not found' }));
 
@@ -46,17 +53,17 @@ app.use((err, _req, res, _next) => {
 
   // Deleting a record another table still points at - report it as a conflict the
   // user can act on rather than a generic 500.
-  if (err.code === 'ER_ROW_IS_REFERENCED_2' || err.errno === 1451) {
+  if (err.code === 'ER_ROW_IS_REFERENCED_2' || err.errno === 1451 || err.code === 'MONGO_REFERENCE_CONFLICT') {
     return res.status(409).json({
       message: 'This record is still used by existing invoices and cannot be deleted.',
     });
   }
-  if (err.code === 'ER_DUP_ENTRY' || err.errno === 1062) {
+  if (err.code === 'ER_DUP_ENTRY' || err.errno === 1062 || err.code === 11000) {
     return res.status(409).json({ message: 'That value already exists.' });
   }
-  if (err.code === 'ECONNREFUSED' || err.code === 'PROTOCOL_CONNECTION_LOST' || err.code === 'ER_ACCESS_DENIED_ERROR') {
+  if (err.code === 'ECONNREFUSED' || err.code === 'PROTOCOL_CONNECTION_LOST' || err.code === 'ER_ACCESS_DENIED_ERROR' || err.name === 'MongoServerSelectionError') {
     return res.status(503).json({
-      message: 'Cannot reach the database. Is MySQL running in XAMPP?',
+      message: 'Cannot reach MongoDB. Check MONGODB_URI and the database deployment.',
     });
   }
 
@@ -67,15 +74,13 @@ const PORT = Number(process.env.PORT) || 5000;
 
 async function start() {
   try {
-    const conn = await pool.getConnection();
-    await conn.ping();
-    conn.release();
-    console.log(`[db] connected to ${process.env.DB_NAME || 'permit_declaration'}`);
+    await connect();
+    await getDb().command({ ping: 1 });
+    console.log(`[db] connected to MongoDB database ${mongoDatabaseName()}`);
   } catch (err) {
-    console.error('\n[db] Could not connect to MySQL.');
+    console.error('\n[db] Could not connect to MongoDB.');
     console.error(`     ${err.code || ''} ${err.message}`);
-    console.error('     On Render: Add a MySQL database service.');
-    console.error('     Locally: Start MySQL in XAMPP, import schema.sql, check .env\n');
+    console.error('     Set MONGODB_URI to a reachable MongoDB deployment.\n');
     process.exit(1);
   }
 
@@ -94,6 +99,10 @@ async function start() {
     }
     throw err;
   });
+
+  const shutdown = async () => { await close(); process.exit(0); };
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
 }
 
 start();

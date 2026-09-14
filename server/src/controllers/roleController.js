@@ -1,8 +1,11 @@
-const pool = require('../config/db');
+const { getClient } = require('../config/db');
+const { collection, nextId, now, numericId, isDuplicateError } = require('../utils/mongo');
 
 async function list(_req, res) {
-  const [roles] = await pool.query('SELECT * FROM roles ORDER BY id');
-  const [rolePerms] = await pool.query('SELECT role_id, permission_id FROM role_permissions');
+  const [roles, rolePerms] = await Promise.all([
+    collection('roles').find().sort({ id: 1 }).toArray(),
+    collection('role_permissions').find().toArray(),
+  ]);
 
   const withPerms = roles.map((role) => ({
     ...role,
@@ -13,7 +16,7 @@ async function list(_req, res) {
 }
 
 async function listPermissions(_req, res) {
-  const [rows] = await pool.query('SELECT * FROM permissions ORDER BY module, action');
+  const rows = await collection('permissions').find().sort({ module: 1, action: 1 }).toArray();
   res.json(rows);
 }
 
@@ -21,27 +24,21 @@ async function create(req, res) {
   const { name, description, permissionIds = [] } = req.body;
   if (!name) return res.status(400).json({ message: 'Role name is required' });
 
-  const conn = await pool.getConnection();
+  const session = getClient().startSession();
   try {
-    await conn.beginTransaction();
-    const [result] = await conn.query(
-      'INSERT INTO roles (name, description, is_system) VALUES (?, ?, 0)',
-      [name, description || null]
-    );
-    const roleId = result.insertId;
-    for (const pid of permissionIds) {
-      await conn.query('INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)', [roleId, pid]);
-    }
-    await conn.commit();
+    const roleId = await nextId('roles', session);
+    await session.withTransaction(async () => {
+      await collection('roles').insertOne({ id: roleId, name, description: description || null, is_system: 0, created_at: now() }, { session });
+      if (permissionIds.length) await collection('role_permissions').insertMany(permissionIds.map((permission_id) => ({ role_id: roleId, permission_id: Number(permission_id) })), { session });
+    });
     res.status(201).json({ id: roleId });
   } catch (err) {
-    await conn.rollback();
-    if (err.code === 'ER_DUP_ENTRY') {
+    if (isDuplicateError(err)) {
       return res.status(409).json({ message: 'A role with this name already exists' });
     }
     throw err;
   } finally {
-    conn.release();
+    await session.endSession();
   }
 }
 
@@ -49,37 +46,36 @@ async function update(req, res) {
   const { name, description, permissionIds = [] } = req.body;
   if (!name) return res.status(400).json({ message: 'Role name is required' });
 
-  const conn = await pool.getConnection();
+  const session = getClient().startSession();
+  const id = numericId(req.params.id);
   try {
-    await conn.beginTransaction();
-    const [result] = await conn.query(
-      'UPDATE roles SET name = ?, description = ? WHERE id = ?',
-      [name, description || null, req.params.id]
-    );
-    if (result.affectedRows === 0) {
-      await conn.rollback();
+    let found = false;
+    await session.withTransaction(async () => {
+      const result = await collection('roles').updateOne({ id }, { $set: { name, description: description || null } }, { session });
+      found = result.matchedCount > 0;
+      if (!found) return;
+      await collection('role_permissions').deleteMany({ role_id: id }, { session });
+      if (permissionIds.length) await collection('role_permissions').insertMany(permissionIds.map((permission_id) => ({ role_id: id, permission_id: Number(permission_id) })), { session });
+    });
+    if (!found) {
       return res.status(404).json({ message: 'Role not found' });
     }
-    await conn.query('DELETE FROM role_permissions WHERE role_id = ?', [req.params.id]);
-    for (const pid of permissionIds) {
-      await conn.query('INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)', [req.params.id, pid]);
-    }
-    await conn.commit();
     res.json({ message: 'Role updated' });
   } catch (err) {
-    await conn.rollback();
     throw err;
   } finally {
-    conn.release();
+    await session.endSession();
   }
 }
 
 async function remove(req, res) {
-  const [[role]] = await pool.query('SELECT is_system FROM roles WHERE id = ?', [req.params.id]);
+  const id = numericId(req.params.id);
+  const role = await collection('roles').findOne({ id });
   if (!role) return res.status(404).json({ message: 'Role not found' });
   if (role.is_system) return res.status(400).json({ message: 'System roles cannot be deleted' });
 
-  await pool.query('DELETE FROM roles WHERE id = ?', [req.params.id]);
+  await collection('roles').deleteOne({ id });
+  await collection('role_permissions').deleteMany({ role_id: id });
   res.json({ message: 'Role deleted' });
 }
 

@@ -1,7 +1,7 @@
 const express = require('express');
 const authenticate = require('../middleware/auth');
 const requirePermission = require('../middleware/requirePermission');
-const ctrl = require('../controllers/dashboardController');
+const ctrl = require('../controllers/dashboardMongoController');
 const asyncHandler = require('../utils/asyncHandler');
 
 const router = express.Router();

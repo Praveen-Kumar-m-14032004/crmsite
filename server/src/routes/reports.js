@@ -1,6 +1,6 @@
 const express = require('express');
 const authenticate = require('../middleware/auth');
-const ctrl = require('../controllers/reportController');
+const ctrl = require('../controllers/reportMongoController');
 const asyncHandler = require('../utils/asyncHandler');
 
 const router = express.Router();

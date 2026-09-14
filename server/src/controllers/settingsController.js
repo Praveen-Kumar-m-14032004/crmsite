@@ -1,8 +1,7 @@
-const pool = require('../config/db');
+const { collection, nextId, now } = require('../utils/mongo');
 
 async function getSettings(_req, res) {
-  const [rows] = await pool.query('SELECT * FROM company_settings LIMIT 1');
-  res.json(rows[0] || {});
+  res.json(await collection('company_settings').findOne({}) || {});
 }
 
 async function updateSettings(req, res) {
@@ -12,29 +11,11 @@ async function updateSettings(req, res) {
 
   if (!company_name) return res.status(400).json({ message: 'Company name is required' });
 
-  const [rows] = await pool.query('SELECT id FROM company_settings LIMIT 1');
-
-  if (rows[0]) {
-    await pool.query(
-      `UPDATE company_settings SET
-        company_name = ?, address = ?, tel = ?, mobile = ?, email = ?,
-        website = ?, contact_no = ?, uen = ?, default_currency = ?
-       WHERE id = ?`,
-      [company_name, address || null, tel || null, mobile || null, email || null,
-        website || null, contact_no || null, uen || null, default_currency || 'SGD', rows[0].id]
-    );
-  } else {
-    await pool.query(
-      `INSERT INTO company_settings
-        (company_name, address, tel, mobile, email, website, contact_no, uen, default_currency)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [company_name, address || null, tel || null, mobile || null, email || null,
-        website || null, contact_no || null, uen || null, default_currency || 'SGD']
-    );
-  }
-
-  const [updated] = await pool.query('SELECT * FROM company_settings LIMIT 1');
-  res.json(updated[0]);
+  const settings = { company_name, address: address || null, tel: tel || null, mobile: mobile || null, email: email || null, website: website || null, contact_no: contact_no || null, uen: uen || null, default_currency: default_currency || 'SGD', updated_at: now() };
+  const existing = await collection('company_settings').findOne({});
+  if (existing) await collection('company_settings').updateOne({ _id: existing._id }, { $set: settings });
+  else await collection('company_settings').insertOne({ id: await nextId('company_settings'), ...settings });
+  res.json(await collection('company_settings').findOne({}));
 }
 
 module.exports = { getSettings, updateSettings };

@@ -1,6 +1,6 @@
 -- =====================================================================
--- Permit Declaration Clone — Database Schema + Seed Data
--- For: XAMPP (MySQL/MariaDB) via phpMyAdmin
+-- Legacy reference only: MySQL schema + seed data used by migrate:mysql.
+-- MongoDB is the only runtime database; do not import this file for startup.
 -- Import: phpMyAdmin -> Import -> choose this file -> Go
 --         (or via CLI: mysql -u root -p < schema.sql)
 -- =====================================================================

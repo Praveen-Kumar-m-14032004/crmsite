@@ -222,9 +222,9 @@ function invoicePdfDefinition(invoice, items, settings) {
           ],
         },
         layout: {
-          hLineWidth: () => 0.7,
+          hLineWidth: () => 1,
           vLineWidth: () => 0,
-          hLineColor: () => RULE,
+          hLineColor: () => PURPLE,
           paddingTop: () => (manyItems ? 4.5 : 7.5),
           paddingBottom: () => (manyItems ? 4.5 : 7.5),
           paddingLeft: () => 0,
@@ -273,7 +273,7 @@ function invoicePdfDefinition(invoice, items, settings) {
       partyName: { fontSize: 11, bold: true, color: INK, margin: [0, 8, 0, 2], lineHeight: 1.25 },
       partyLine: { fontSize: 9, color: INK, lineHeight: 1.35 },
 
-      th: { fontSize: 9, color: MUTED },
+      th: { fontSize: 9.5, bold: true, color: INK },
       cell: { fontSize: 9, color: INK, lineHeight: 1.25 },
 
       payLead: { fontSize: 9, color: INK },
@@ -336,9 +336,9 @@ function reportPdfDefinition(rows, filters, summary) {
       {
         table: { headerRows: 1, widths: [50, 58, '*', 74, 60, 55, 55, 72, 52], body },
         layout: {
-          hLineWidth: () => 0.7,
+          hLineWidth: () => 0.8,
           vLineWidth: () => 0,
-          hLineColor: () => RULE,
+          hLineColor: () => PURPLE,
           paddingTop: () => 7,
           paddingBottom: () => 7,
           paddingLeft: () => 0,

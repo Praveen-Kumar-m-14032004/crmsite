@@ -22,9 +22,11 @@ export default function SearchableSelect({
 
   const filtered = useMemo(() => {
     if (!query.trim()) return options;
-    const q = query.toLowerCase();
+    const q = query.toLowerCase().trim();
     return options.filter((o) =>
-      o.label.toLowerCase().includes(q) || (o.sub && o.sub.toLowerCase().includes(q))
+      o.label.toLowerCase().includes(q) ||
+      (o.sub && o.sub.toLowerCase().includes(q)) ||
+      String(o.value).toLowerCase() === q
     );
   }, [options, query]);
 
@@ -39,39 +41,66 @@ export default function SearchableSelect({
     }
   }, [selected, open]);
 
-  useEffect(() => {
-    const handleDocClick = (e) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
-        if (open) {
-          if (query.trim()) {
-            const exact = options.find((o) => o.label.toLowerCase() === query.trim().toLowerCase());
-            if (exact) {
-              onChange(exact.value);
-            } else if (filtered.length === 1) {
-              onChange(filtered[0].value);
-            } else if (selected) {
-              setQuery(selected.label);
-            } else {
-              setQuery('');
-            }
-          } else {
-            onChange('');
-            setQuery('');
-          }
-          setOpen(false);
-        }
-      }
-    };
-    document.addEventListener('mousedown', handleDocClick);
-    return () => document.removeEventListener('mousedown', handleDocClick);
-  }, [open, query, options, filtered, selected, onChange]);
-
   const handleSelect = (val) => {
     onChange(val);
     const opt = options.find((o) => String(o.value) === String(val));
     setQuery(opt?.label || '');
     setOpen(false);
   };
+
+  const commitSelection = (text) => {
+    const q = (text !== undefined ? text : query).trim().toLowerCase();
+    if (!q) {
+      onChange('');
+      setQuery('');
+      setOpen(false);
+      return;
+    }
+    // 1. Exact label match (case-insensitive)
+    const exact = options.find((o) => o.label.trim().toLowerCase() === q);
+    if (exact) {
+      handleSelect(exact.value);
+      return;
+    }
+    // 2. Exact value match (e.g. ID)
+    const exactVal = options.find((o) => String(o.value).toLowerCase() === q);
+    if (exactVal) {
+      handleSelect(exactVal.value);
+      return;
+    }
+    // 3. Prefix match
+    const prefix = options.find((o) => o.label.trim().toLowerCase().startsWith(q));
+    if (prefix) {
+      handleSelect(prefix.value);
+      return;
+    }
+    // 4. Any match in filtered
+    if (filtered.length > 0) {
+      const pick = filtered[highlightIdx] || filtered[0];
+      handleSelect(pick.value);
+      return;
+    }
+    // 5. If no match at all, revert to previously selected or clear
+    if (selected) {
+      setQuery(selected.label);
+    } else {
+      onChange('');
+      setQuery('');
+    }
+    setOpen(false);
+  };
+
+  useEffect(() => {
+    const handleDocClick = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+        if (open) {
+          commitSelection();
+        }
+      }
+    };
+    document.addEventListener('mousedown', handleDocClick);
+    return () => document.removeEventListener('mousedown', handleDocClick);
+  }, [open, query, options, filtered, selected, highlightIdx]);
 
   const handleClear = (e) => {
     e.stopPropagation();
@@ -98,24 +127,17 @@ export default function SearchableSelect({
         setHighlightIdx((prev) => (prev - 1 >= 0 ? prev - 1 : filtered.length - 1));
       }
     } else if (e.key === 'Enter') {
-      if (open && filtered.length > 0) {
+      if (open) {
         e.preventDefault();
-        const pick = filtered[highlightIdx] || filtered[0];
-        handleSelect(pick.value);
+        commitSelection();
       }
     } else if (e.key === 'Escape') {
       setOpen(false);
       setQuery(selected?.label || '');
     } else if (e.key === 'Tab') {
-      if (open && query.trim()) {
-        const exact = options.find((o) => o.label.toLowerCase() === query.trim().toLowerCase());
-        if (exact) {
-          handleSelect(exact.value);
-        } else if (filtered.length === 1) {
-          handleSelect(filtered[0].value);
-        }
+      if (open) {
+        commitSelection();
       }
-      setOpen(false);
     }
   };
 
@@ -142,11 +164,33 @@ export default function SearchableSelect({
           onKeyDown={handleKeyDown}
           required={required && !value}
         />
-        {value && !disabled && (
-          <button type="button" className="ss-clear" onClick={handleClear} tabIndex={-1} title="Clear">
-            ×
+        <div className="ss-actions">
+          {value && !disabled && (
+            <button type="button" className="ss-clear" onClick={handleClear} tabIndex={-1} title="Clear">
+              ×
+            </button>
+          )}
+          <button
+            type="button"
+            className={`ss-arrow${open ? ' ss-open' : ''}`}
+            tabIndex={-1}
+            onClick={(e) => {
+              e.preventDefault();
+              if (disabled) return;
+              if (open) {
+                commitSelection();
+              } else {
+                setOpen(true);
+                setQuery(selected?.label || '');
+                inputRef.current?.focus();
+              }
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
           </button>
-        )}
+        </div>
       </div>
       {open && (
         <div className="ss-dropdown" role="listbox">
@@ -160,7 +204,14 @@ export default function SearchableSelect({
                 <div
                   key={String(o.value) + idx}
                   className={`ss-option${isSelected ? ' ss-active' : ''}${isHighlighted ? ' ss-highlighted' : ''}`}
-                  onMouseDown={() => handleSelect(o.value)}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleSelect(o.value);
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleSelect(o.value);
+                  }}
                   onMouseEnter={() => setHighlightIdx(idx)}
                 >
                   <div className="ss-option-label">{o.label}</div>

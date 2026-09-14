@@ -125,9 +125,21 @@ export default function AddInvoice() {
     const activeItems = items.filter((it) => it.product_id || it.description?.trim() || it.rate !== '');
     const itemsToSave = activeItems.length ? activeItems : items;
 
+    let selectedCustId = customerId;
+    if (!selectedCustId || !Number(selectedCustId)) {
+      const match = customers.find((c) =>
+        String(c.id) === String(customerId) ||
+        c.companyname?.toLowerCase().trim() === String(customerId).toLowerCase().trim()
+      );
+      if (match) {
+        selectedCustId = String(match.id);
+        setCustomerId(selectedCustId);
+      }
+    }
+
     if (!invoiceNo.trim()) { setError('Invoice number is required.'); return; }
     if (!invoiceDate) { setError('Invoice date is required.'); return; }
-    if (!customerId || !Number(customerId)) { setError('Please select a company/customer from the dropdown.'); return; }
+    if (!selectedCustId || !Number(selectedCustId)) { setError('Please select a company/customer from the dropdown.'); return; }
     if (!activeItems.length) { setError('Please add at least one line item.'); return; }
     if (itemsToSave.some((it) => !it.product_id)) { setError('Every line item needs a product selected.'); return; }
     if (itemsToSave.some((it) => it.rate === '' || Number(it.rate) < 0)) { setError('Every line item needs a valid rate.'); return; }
@@ -142,7 +154,7 @@ export default function AddInvoice() {
     const payload = {
       invoice_no: invoiceNo.trim(),
       invoice_date: invoiceDate,
-      customer_id: Number(customerId),
+      customer_id: Number(selectedCustId),
       customer_contact: customerContact,
       items: itemsToSave.map((it) => ({
         product_id: Number(it.product_id),

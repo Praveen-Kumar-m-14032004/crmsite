@@ -913,20 +913,30 @@ table.datatable td .cell-strong { font-weight: 600; color: var(--ink); }
    Searchable Select
    --------------------------------------------------------------- */
 .ss-wrap { position: relative; }
-.ss-input-wrap { position: relative; }
-.ss-input-wrap input { width: 100%; padding-right: 32px; }
+.ss-input-wrap { position: relative; display: flex; align-items: center; }
+.ss-input-wrap input { width: 100%; padding-right: 56px; }
+.ss-actions {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center; gap: 4px; z-index: 2;
+}
 .ss-clear {
-  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
   background: none; border: none; font-size: 17px; color: var(--muted);
   cursor: pointer; line-height: 1; padding: 2px 4px; border-radius: 50%;
   transition: color .15s, background .15s;
 }
 .ss-clear:hover { color: var(--red); background: var(--red-soft); }
+.ss-arrow {
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  padding: 4px; display: flex; align-items: center; justify-content: center;
+  border-radius: 4px; transition: transform .15s, color .15s;
+}
+.ss-arrow:hover { color: var(--ink); }
+.ss-arrow.ss-open { transform: rotate(180deg); color: var(--purple); }
 .ss-dropdown {
-  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 50;
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1000;
   background: var(--surface); border: 1px solid var(--line);
-  border-radius: var(--r-md); box-shadow: var(--shadow-md);
-  max-height: 220px; overflow-y: auto;
+  border-radius: var(--r-md); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.15), 0 8px 10px -6px rgba(0,0,0,0.1);
+  max-height: 240px; overflow-y: auto;
   animation: popIn .18s var(--ease);
 }
 .ss-option {

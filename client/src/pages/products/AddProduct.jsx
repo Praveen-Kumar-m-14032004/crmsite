@@ -67,7 +67,6 @@ export default function AddProduct() {
                 autoFocus
                 required
               />
-              <span className="card-sub">This is the service line shown on invoices.</span>
             </div>
 
             <div className="form-actions">

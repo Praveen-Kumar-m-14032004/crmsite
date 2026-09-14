@@ -36,6 +36,9 @@ export function EditIcon(p) {
 export function TrashIcon(p) {
   return (<svg {...s(p)}><path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /></svg>);
 }
+export function RestoreIcon(p) {
+  return (<svg {...s(p)}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /></svg>);
+}
 export function PrinterIcon(p) {
   return (<svg {...s(p)}><path d="M6 9V2h12v7" /><rect x="4" y="9" width="16" height="8" rx="1.5" /><path d="M6 17v5h12v-5" /></svg>);
 }

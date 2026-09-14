@@ -32,6 +32,8 @@ export const invoicesApi = {
   update: (id, data) => api.put(`/invoices/${id}`, data),
   patchStatus: (id, status) => api.patch(`/invoices/${id}/status`, { status }),
   remove: (id) => api.delete(`/invoices/${id}`),
+  restore: (id) => api.post(`/invoices/${id}/restore`),
+  permanentDelete: (id) => api.delete(`/invoices/${id}/permanent`),
 };
 
 export const reportsApi = {

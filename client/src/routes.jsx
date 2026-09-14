@@ -32,6 +32,7 @@ export default function AppRoutes() {
         <Route path="/products/:id/edit" element={<PermissionRoute permission="products.edit"><AddProduct /></PermissionRoute>} />
 
         <Route path="/invoices" element={<PermissionRoute permission="invoices.view"><ManageInvoice /></PermissionRoute>} />
+        <Route path="/invoices/trash" element={<PermissionRoute permission="invoices.delete"><ManageInvoice /></PermissionRoute>} />
         <Route path="/invoices/add" element={<PermissionRoute permission="invoices.create"><AddInvoice /></PermissionRoute>} />
         <Route path="/invoices/:id/edit" element={<PermissionRoute permission="invoices.edit"><AddInvoice /></PermissionRoute>} />
 

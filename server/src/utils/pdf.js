@@ -24,8 +24,7 @@ function money(value) {
 }
 
 function formatDate(d) {
-  // DATE columns arrive as plain "YYYY-MM-DD" strings (see dateStrings in db.js) -
-  // slice instead of routing through Date/local-timezone math, which can shift the day.
+  if (!d) return '—';
   if (typeof d === 'string') return d.slice(0, 10);
   const date = new Date(d);
   const yyyy = date.getFullYear();
@@ -35,16 +34,13 @@ function formatDate(d) {
 }
 
 function buildPdf(docDefinition) {
-  // A caller-supplied `defaultStyle` must merge on top of these base defaults, not
-  // replace them wholesale - a naive spread drops `font`, and pdfmake then falls
-  // back to a font name that isn't registered in the fonts table above.
   const { defaultStyle, ...rest } = docDefinition;
 
   return new Promise((resolve, reject) => {
     try {
       const doc = printer.createPdfKitDocument({
         pageSize: 'A4',
-        pageMargins: [48, 44, 48, 56],
+        pageMargins: [48, 42, 48, 48],
         ...rest,
         defaultStyle: { font: 'Roboto', fontSize: 9.5, color: INK, ...defaultStyle },
       });
@@ -59,9 +55,6 @@ function buildPdf(docDefinition) {
   });
 }
 
-// The brand mark from the reference invoice: a purple rounded tile with a white
-// tick, set beside the two-line "Permit Declaration" wordmark. Drawn with canvas
-// primitives so it needs no image assets or SVG plugin.
 function logoBlock() {
   return {
     columns: [
@@ -92,8 +85,6 @@ function logoBlock() {
   };
 }
 
-// "PAYNOW" lockup from the reference: purple wordmark with a ring-and-dot glyph
-// standing in for the O.
 function payNowBadge() {
   return {
     columns: [
@@ -115,10 +106,11 @@ function payNowBadge() {
 
 function invoicePdfDefinition(invoice, items, settings) {
   const currency = settings.default_currency || 'SGD';
+  const manyItems = items.length >= 8;
 
   const itemRows = items.map((item, idx) => [
     { text: String(idx + 1), style: 'cell', alignment: 'left' },
-    { text: item.productname, style: 'cell' },
+    { text: item.productname || '', style: 'cell' },
     { text: item.description || '', style: 'cell' },
     { text: String(Number(item.rate)), style: 'cell' },
     { text: String(Number(item.quantity)), style: 'cell' },
@@ -140,7 +132,7 @@ function invoicePdfDefinition(invoice, items, settings) {
 
   return {
     content: [
-      // ---- Header: brand mark left, date + invoice number right ----
+      // ---- Header: Logo left, Date + Invoice # right ----
       {
         columns: [
           logoBlock(),
@@ -153,35 +145,38 @@ function invoicePdfDefinition(invoice, items, settings) {
             alignment: 'right',
           },
         ],
-        margin: [0, 0, 0, 34],
+        margin: [0, 0, 0, manyItems ? 16 : 28],
       },
 
-      // ---- Parties ----
+      // ---- From & To Section ----
       {
         columns: [
-          { width: '8%', text: '' },
+          { width: '6%', text: '' },
           {
-            width: '44%',
-            stack: [{ text: 'From:', style: 'partyLabel' }, ...fromLines],
+            width: '45%',
+            stack: [
+              { text: 'From:', style: 'partyLabel' },
+              ...fromLines,
+            ],
           },
           {
-            width: '48%',
+            width: '49%',
             stack: [
-              { text: `To: ${invoice.companyname}`, style: 'partyLabel' },
-              { text: `Name: ${invoice.person_incharge || ''}`, style: 'partyName', margin: [0, 9, 0, 0] },
+              { text: `To: ${invoice.companyname || ''}`, style: 'partyLabelBold' },
+              { text: `Name: ${invoice.person_incharge || ''}`, style: 'partyName', margin: [0, 8, 0, 0] },
               { text: `Address: ${invoice.customer_address || ''}`, style: 'partyLine' },
               { text: `Phone: ${invoice.customer_mobile || invoice.customer_contact || ''}`, style: 'partyLine' },
             ],
           },
         ],
-        margin: [0, 0, 0, 40],
+        margin: [0, 0, 0, manyItems ? 18 : 32],
       },
 
-      // ---- Line items ----
+      // ---- Line items table ----
       {
         table: {
           headerRows: 1,
-          widths: [16, '*', 78, 62, 30, 52],
+          widths: [18, '*', 95, 68, 32, 58],
           body: [
             [
               { text: '#', style: 'th' },
@@ -198,18 +193,18 @@ function invoicePdfDefinition(invoice, items, settings) {
           hLineWidth: () => 0.7,
           vLineWidth: () => 0,
           hLineColor: () => RULE,
-          paddingTop: () => 9,
-          paddingBottom: () => 9,
+          paddingTop: () => (manyItems ? 4.5 : 8),
+          paddingBottom: () => (manyItems ? 4.5 : 8),
           paddingLeft: () => 0,
           paddingRight: (i) => (i === 5 ? 0 : 8),
         },
       },
 
-      // ---- Payment details + total ----
+      // ---- Payment details + Total ----
       {
         columns: [
           {
-            width: '55%',
+            width: '56%',
             stack: [
               { text: 'All Cheques should be crossed and made payable to', style: 'payLead' },
               { text: (settings.company_name || '').toUpperCase(), style: 'payee' },
@@ -218,39 +213,44 @@ function invoicePdfDefinition(invoice, items, settings) {
             ],
           },
           {
-            width: '45%',
+            width: '44%',
             stack: [
-              { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 232, y2: 0, lineWidth: 0.7, lineColor: RULE }] },
+              { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 228, y2: 0, lineWidth: 0.8, lineColor: '#1a1e28' }] },
               {
                 columns: [
                   { text: 'Total', style: 'totalLabel' },
                   { text: money(invoice.sub_amount), style: 'totalValue', alignment: 'right' },
                 ],
-                margin: [0, 12, 0, 0],
+                margin: [0, 10, 0, 0],
               },
             ],
-            margin: [0, 34, 0, 0],
+            margin: [0, 28, 0, 0],
           },
         ],
-        margin: [0, 78, 0, 0],
+        margin: [0, manyItems ? 22 : 60, 0, 0],
       },
     ],
 
     styles: {
       wordmark: { fontSize: 15.5, bold: true, color: PURPLE, lineHeight: 1 },
-      dateLine: { fontSize: 12, color: INK, margin: [0, 2, 0, 4] },
-      invoiceNo: { fontSize: 17, bold: true, color: INK },
-      partyLabel: { fontSize: 9.5, bold: true, color: INK },
-      partyName: { fontSize: 11.5, bold: true, color: INK, margin: [0, 9, 0, 3], lineHeight: 1.25 },
-      partyLine: { fontSize: 9.5, color: INK, lineHeight: 1.35 },
-      th: { fontSize: 9.5, color: MUTED },
-      cell: { fontSize: 9.5, color: INK, lineHeight: 1.2 },
-      payLead: { fontSize: 9.5, color: INK },
-      payee: { fontSize: 12.5, bold: true, color: INK, margin: [0, 3, 0, 0] },
-      payNow: { fontSize: 14.5, bold: true, color: PURPLE },
-      uen: { fontSize: 11.5, bold: true, color: INK },
-      totalLabel: { fontSize: 10.5, color: INK },
-      totalValue: { fontSize: 10.5, color: INK },
+      dateLine: { fontSize: 11.5, color: INK, margin: [0, 2, 0, 3] },
+      invoiceNo: { fontSize: 16.5, bold: true, color: INK },
+
+      partyLabel: { fontSize: 9.5, color: INK },
+      partyLabelBold: { fontSize: 9.5, bold: true, color: INK },
+      partyName: { fontSize: 11, bold: true, color: INK, margin: [0, 8, 0, 2], lineHeight: 1.25 },
+      partyLine: { fontSize: 9, color: INK, lineHeight: 1.35 },
+
+      th: { fontSize: 9, color: MUTED },
+      cell: { fontSize: 9, color: INK, lineHeight: 1.25 },
+
+      payLead: { fontSize: 9, color: INK },
+      payee: { fontSize: 12, bold: true, color: INK, margin: [0, 3, 0, 0] },
+      payNow: { fontSize: 14, bold: true, color: PURPLE },
+      uen: { fontSize: 11, bold: true, color: INK },
+
+      totalLabel: { fontSize: 10, color: INK },
+      totalValue: { fontSize: 10.5, bold: true, color: INK },
     },
   };
 }

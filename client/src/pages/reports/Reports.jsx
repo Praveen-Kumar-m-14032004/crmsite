@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { customersApi, reportsApi, settingsApi } from '../../api/endpoints';
 import { downloadViaApi } from '../../api/download';
 import { usePermissions } from '../../hooks/usePermissions';
 import { errorMessage, useToast } from '../../hooks/ToastContext';
 import { formatDateDMY } from '../../utils/date';
+import SearchableSelect from '../../components/common/SearchableSelect';
 import {
   DownloadIcon, FilterIcon, InvoiceIcon, SpinnerIcon,
 } from '../../components/common/Icons';
@@ -31,12 +32,17 @@ export default function Reports() {
 
   useEffect(() => {
     customersApi.list({ limit: 1000 })
-      .then((res) => setCompanies(res.data.data))
-      .catch(() => {});
+      .then((res) => setCompanies(res.data.data || []))
+      .catch(() => { });
     settingsApi.get()
       .then((res) => setCurrency(res.data?.default_currency || 'SGD'))
-      .catch(() => {});
+      .catch(() => { });
   }, []);
+
+  const companyOptions = useMemo(
+    () => companies.map((c) => ({ value: c.companyname, label: c.companyname })),
+    [companies]
+  );
 
   const set = (field) => (e) => setFilters((f) => ({ ...f, [field]: e.target.value }));
 
@@ -102,10 +108,13 @@ export default function Reports() {
           <div className="form-grid">
             <div className="form-field">
               <label htmlFor="company">Company Name</label>
-              <select id="company" value={filters.company} onChange={set('company')}>
-                <option value="">Any company</option>
-                {companies.map((c) => <option key={c.id} value={c.companyname}>{c.companyname}</option>)}
-              </select>
+              <SearchableSelect
+                id="company"
+                options={companyOptions}
+                value={filters.company}
+                onChange={(val) => setFilters((f) => ({ ...f, company: val }))}
+                placeholder="Any company"
+              />
             </div>
             <div className="form-field">
               <label htmlFor="start">Start Date</label>
@@ -129,7 +138,7 @@ export default function Reports() {
             </div>
             <div className="form-field">
               <label htmlFor="invno">Invoice No.</label>
-              <input id="invno" value={filters.invoiceNo} onChange={set('invoiceNo')} placeholder="e.g. 290" />
+              <input id="invno" value={filters.invoiceNo} onChange={set('invoiceNo')} placeholder="e.g. 20260914-101" />
             </div>
           </div>
 

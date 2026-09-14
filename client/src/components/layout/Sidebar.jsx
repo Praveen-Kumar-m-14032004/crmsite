@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/AuthContext';
 import {
   BrandLockup, ChevronRight, CustomersIcon, DashboardIcon, InvoiceIcon,
-  ProductsIcon, ReportsIcon, SettingsIcon, UsersIcon,
+  ProductsIcon, ReportsIcon, SettingsIcon, TrashIcon, UsersIcon,
 } from '../common/Icons';
 
 const MENU = [
@@ -31,6 +31,7 @@ const MENU = [
     ],
   },
   { type: 'link', label: 'Reports', to: '/reports', permission: 'reports.view', icon: ReportsIcon },
+  { type: 'link', label: 'Trash', to: '/invoices/trash', permission: 'invoices.delete', icon: TrashIcon },
   { type: 'label', label: 'Administration', permission: ['users.manage', 'roles.manage', 'settings.manage'] },
   {
     type: 'group', label: 'User Management', permission: ['users.manage', 'roles.manage'], icon: UsersIcon,
@@ -146,7 +147,7 @@ export default function Sidebar({ collapsed, onNavigate }) {
         );
       })}
 
-      <div className="sidebar-footer">Permit Declaration v1.0</div>
+      <div className="sidebar-footer">Permit Declaration</div>
     </aside>
   );
 }

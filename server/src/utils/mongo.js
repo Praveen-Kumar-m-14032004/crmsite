@@ -21,8 +21,9 @@ async function nextId(name, session) {
     { $inc: { value: 1 } },
     { upsert: true, returnDocument: 'after', session },
   );
-  const counter = result && (result.value || result);
-  return counter.value;
+  // New driver returns doc directly; old driver wraps in result.value
+  const doc = result?.value !== undefined && typeof result.value === 'object' ? result.value : result;
+  return doc.value;
 }
 
 function isDuplicateError(error) {

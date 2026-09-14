@@ -4,12 +4,11 @@ import { customersApi, invoicesApi, productsApi, settingsApi } from '../../api/e
 import { errorMessage, useToast } from '../../hooks/ToastContext';
 import { toDateInputValue } from '../../utils/date';
 import { PlusIcon, SpinnerIcon, TrashIcon } from '../../components/common/Icons';
+import SearchableSelect from '../../components/common/SearchableSelect';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const emptyItem = () => ({ product_id: '', description: '', rate: '', quantity: 1 });
-
-const PAYMENT_TYPES = ['Cash', 'Bank Transfer', 'Cheque', 'UPI'];
-const PAYMENT_STATUSES = ['Full Payment', 'Partial Payment', 'Due'];
+const defaultItems = () => Array.from({ length: 6 }, emptyItem);
 
 export default function AddInvoice() {
   const { id } = useParams();
@@ -28,11 +27,8 @@ export default function AddInvoice() {
   const [invoiceDate, setInvoiceDate] = useState(today());
   const [customerId, setCustomerId] = useState('');
   const [customerContact, setCustomerContact] = useState('');
-  const [items, setItems] = useState([emptyItem()]);
+  const [items, setItems] = useState(defaultItems());
   const [paidAmount, setPaidAmount] = useState('');
-  const [paymentType, setPaymentType] = useState('Cash');
-  const [paymentStatus, setPaymentStatus] = useState('Due');
-  const [statusTouched, setStatusTouched] = useState(false);
   const [invoiceStatus, setInvoiceStatus] = useState('Pending');
   // Version of the record this form was loaded from, sent back on save so the
   // server can reject an edit that would clobber someone else's newer changes.
@@ -59,17 +55,14 @@ export default function AddInvoice() {
           setCustomerId(String(inv.customer_id));
           setCustomerContact(inv.customer_contact || '');
           setPaidAmount(String(inv.paid_amount ?? ''));
-          setPaymentType(inv.payment_type || 'Cash');
-          setPaymentStatus(inv.payment_status || 'Due');
           setInvoiceStatus(inv.status || 'Pending');
           setLoadedVersion(inv.version ?? null);
-          setStatusTouched(true);
           setItems(inv.items.length ? inv.items.map((it) => ({
             product_id: String(it.product_id),
             description: it.description || '',
             rate: String(it.rate),
             quantity: String(Number(it.quantity)),
-          })) : [emptyItem()]);
+          })) : defaultItems());
         } else {
           setInvoiceNo(last.data.invoice_no);
         }
@@ -87,20 +80,20 @@ export default function AddInvoice() {
   const paid = Number(paidAmount) || 0;
   const dueAmount = Math.max(subAmount - paid, 0);
 
-  // Suggest the payment status from the numbers until the user picks one themselves.
-  useEffect(() => {
-    if (statusTouched) return;
-    if (subAmount > 0 && paid >= subAmount) setPaymentStatus('Full Payment');
-    else if (paid > 0) setPaymentStatus('Partial Payment');
-    else setPaymentStatus('Due');
-  }, [subAmount, paid, statusTouched]);
-
-  const handleCustomerChange = (e) => {
-    const value = e.target.value;
+  const handleCustomerChange = (value) => {
     setCustomerId(value);
-    const cust = customers.find((c) => String(c.id) === value);
+    const cust = customers.find((c) => String(c.id) === String(value));
     setCustomerContact(cust?.mobile_no || '');
   };
+
+  const companyOptions = useMemo(
+    () => (customers || []).map((c) => ({
+      value: String(c.id),
+      label: c.companyname,
+      sub: `Customer ID: #${c.id}${c.mobile_no ? ` · Tel: ${c.mobile_no}` : ''}`
+    })),
+    [customers]
+  );
 
   const updateItem = (idx, field, value) =>
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [field]: value } : it)));
@@ -111,10 +104,8 @@ export default function AddInvoice() {
   const resetForm = () => {
     setCustomerId('');
     setCustomerContact('');
-    setItems([emptyItem()]);
+    setItems(defaultItems());
     setPaidAmount('');
-    setPaymentType('Cash');
-    setStatusTouched(false);
     setInvoiceDate(today());
     setError('');
   };
@@ -123,13 +114,21 @@ export default function AddInvoice() {
     e.preventDefault();
     setError('');
 
+    const activeItems = items.filter((it) => it.product_id || it.description?.trim() || it.rate !== '');
+    const itemsToSave = activeItems.length ? activeItems : items;
+
     if (!invoiceNo.trim()) { setError('Invoice number is required.'); return; }
     if (!invoiceDate) { setError('Invoice date is required.'); return; }
-    if (!customerId) { setError('Please select a company.'); return; }
-    if (items.some((it) => !it.product_id)) { setError('Every line item needs a product selected.'); return; }
-    if (items.some((it) => it.rate === '' || Number(it.rate) < 0)) { setError('Every line item needs a valid rate.'); return; }
-    if (items.some((it) => !Number(it.quantity) || Number(it.quantity) <= 0)) { setError('Quantity must be greater than zero.'); return; }
+    if (!customerId || !Number(customerId)) { setError('Please select a company/customer from the dropdown.'); return; }
+    if (!activeItems.length) { setError('Please add at least one line item.'); return; }
+    if (itemsToSave.some((it) => !it.product_id)) { setError('Every line item needs a product selected.'); return; }
+    if (itemsToSave.some((it) => it.rate === '' || Number(it.rate) < 0)) { setError('Every line item needs a valid rate.'); return; }
+    if (itemsToSave.some((it) => !Number(it.quantity) || Number(it.quantity) <= 0)) { setError('Quantity must be greater than zero.'); return; }
     if (paid > subAmount) { setError('Paid amount cannot be more than the sub amount.'); return; }
+
+    const autoPaymentStatus = paid >= subAmount && subAmount > 0
+      ? 'Full Payment'
+      : (paid > 0 ? 'Partial Payment' : 'Due');
 
     setSaving(true);
     const payload = {
@@ -137,15 +136,15 @@ export default function AddInvoice() {
       invoice_date: invoiceDate,
       customer_id: Number(customerId),
       customer_contact: customerContact,
-      items: items.map((it) => ({
+      items: itemsToSave.map((it) => ({
         product_id: Number(it.product_id),
         description: it.description,
         rate: Number(it.rate),
         quantity: Number(it.quantity),
       })),
       paid_amount: paid,
-      payment_type: paymentType,
-      payment_status: paymentStatus,
+      payment_type: null,
+      payment_status: autoPaymentStatus,
       // Preserve the stored workflow status when editing; new invoices start Pending.
       status: isEdit ? invoiceStatus : 'Pending',
       ...(isEdit && loadedVersion !== null ? { expected_version: loadedVersion } : {}),
@@ -197,30 +196,37 @@ export default function AddInvoice() {
           <div className="card-head" style={{ marginBottom: 18 }}>
             <div>
               <div className="card-title">Invoice details</div>
-              <div className="card-sub">Who this invoice is for and when it was raised</div>
             </div>
           </div>
 
           <div className="form-grid">
+            {/* 1. Company Name (searchable) */}
+            <div className="form-field">
+              <label htmlFor="company">Company Name <span className="req">*</span></label>
+              <SearchableSelect
+                id="company"
+                options={companyOptions}
+                value={customerId}
+                onChange={handleCustomerChange}
+                placeholder="Search company…"
+                required
+              />
+            </div>
+            {/* 2. Invoice No */}
             <div className="form-field">
               <label htmlFor="invno">Invoice No <span className="req">*</span></label>
               <input id="invno" value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} required />
             </div>
-            <div className="form-field">
-              <label htmlFor="invdate">Invoice Date <span className="req">*</span></label>
-              <input id="invdate" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} required />
-            </div>
-            <div className="form-field">
-              <label htmlFor="company">Company Name <span className="req">*</span></label>
-              <select id="company" value={customerId} onChange={handleCustomerChange} required>
-                <option value="">Select company…</option>
-                {customers.map((c) => <option key={c.id} value={c.id}>{c.companyname}</option>)}
-              </select>
-            </div>
+            {/* 3. Customer Contact No */}
             <div className="form-field">
               <label htmlFor="contact">Customer Contact No.</label>
               <input id="contact" value={customerContact} onChange={(e) => setCustomerContact(e.target.value)}
                 placeholder="Auto-filled from customer" />
+            </div>
+            {/* 4. Invoice Date */}
+            <div className="form-field">
+              <label htmlFor="invdate">Invoice Date <span className="req">*</span></label>
+              <input id="invdate" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} required />
             </div>
           </div>
         </div>
@@ -228,8 +234,7 @@ export default function AddInvoice() {
         <div className="card" style={{ marginTop: 20 }}>
           <div className="card-head" style={{ marginBottom: 16 }}>
             <div>
-              <div className="card-title">Line items</div>
-              <div className="card-sub">Totals update as you type</div>
+              <div className="card-title">Items</div>
             </div>
             <span className="badge badge-info badge-plain">{items.length} {items.length === 1 ? 'row' : 'rows'}</span>
           </div>
@@ -250,7 +255,7 @@ export default function AddInvoice() {
                 {items.map((item, idx) => (
                   <tr key={idx}>
                     <td>
-                      <select value={item.product_id} onChange={(e) => updateItem(idx, 'product_id', e.target.value)} required>
+                      <select value={item.product_id} onChange={(e) => updateItem(idx, 'product_id', e.target.value)}>
                         <option value="">Select…</option>
                         {products.map((p) => <option key={p.id} value={p.id}>{p.productname}</option>)}
                       </select>
@@ -261,11 +266,11 @@ export default function AddInvoice() {
                     </td>
                     <td>
                       <input type="number" step="0.01" min="0" inputMode="decimal" value={item.rate}
-                        onChange={(e) => updateItem(idx, 'rate', e.target.value)} placeholder="0.00" required />
+                        onChange={(e) => updateItem(idx, 'rate', e.target.value)} placeholder="0.00" />
                     </td>
                     <td>
                       <input type="number" step="1" min="1" inputMode="numeric" value={item.quantity}
-                        onChange={(e) => updateItem(idx, 'quantity', e.target.value)} required />
+                        onChange={(e) => updateItem(idx, 'quantity', e.target.value)} />
                     </td>
                     <td>
                       <input readOnly className="num"
@@ -296,19 +301,6 @@ export default function AddInvoice() {
               <label htmlFor="paid">Paid Amount</label>
               <input id="paid" type="number" step="0.01" min="0" inputMode="decimal" value={paidAmount}
                 onChange={(e) => setPaidAmount(e.target.value)} placeholder="0.00" />
-            </div>
-            <div className="form-field">
-              <label htmlFor="ptype">Payment Type</label>
-              <select id="ptype" value={paymentType} onChange={(e) => setPaymentType(e.target.value)}>
-                {PAYMENT_TYPES.map((t) => <option key={t}>{t}</option>)}
-              </select>
-            </div>
-            <div className="form-field">
-              <label htmlFor="pstatus">Payment Status</label>
-              <select id="pstatus" value={paymentStatus}
-                onChange={(e) => { setPaymentStatus(e.target.value); setStatusTouched(true); }}>
-                {PAYMENT_STATUSES.map((sVal) => <option key={sVal}>{sVal}</option>)}
-              </select>
             </div>
             <div className="totals-highlight">
               <span>Due Amount</span>

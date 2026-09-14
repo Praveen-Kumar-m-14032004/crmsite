@@ -65,6 +65,9 @@ export default function Login() {
 
       <main className="login-main">
         <form className="login-card" onSubmit={handleSubmit}>
+          <div className="login-card-logo" style={{ marginBottom: 18 }}>
+            <BrandLockup width={165} />
+          </div>
           <h1>Welcome back</h1>
           <p className="subtitle">Sign in to continue to your dashboard.</p>
 

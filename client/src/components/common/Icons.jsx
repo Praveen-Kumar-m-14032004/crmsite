@@ -1,3 +1,5 @@
+import logoImg from '../../assets/logo.png';
+
 const base = {
   width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none',
   stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round',
@@ -15,16 +17,21 @@ export function LogoMark({ size = 22 }) {
   );
 }
 
-export function BrandLockup({ onDark = false, tileSize = 38 }) {
+export function BrandLockup({ onDark = false, width = 180 }) {
   return (
-    <div className="brand-lockup">
-      <span className={`brand-tile${onDark ? ' on-dark' : ''}`} style={{ width: tileSize, height: tileSize }}>
-        <LogoMark size={tileSize * 0.55} />
-      </span>
-      <span className="brand-text">
-        <strong>Permit</strong>
-        <span>Declaration</span>
-      </span>
+    <div className={`brand-lockup${onDark ? ' on-dark' : ''}`}>
+      <img
+        src={logoImg}
+        alt="Permit Declaration"
+        style={{
+          width: width,
+          height: 'auto',
+          display: 'block',
+          borderRadius: onDark ? '6px' : '0',
+          background: onDark ? '#ffffff' : 'transparent',
+          padding: onDark ? '6px 10px' : '0',
+        }}
+      />
     </div>
   );
 }

@@ -82,7 +82,7 @@ export default function Sidebar({ collapsed, onNavigate }) {
   return (
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-brand">
-        <BrandLockup onDark tileSize={36} />
+        <BrandLockup onDark width={160} />
       </div>
 
       {MENU.map((item) => {

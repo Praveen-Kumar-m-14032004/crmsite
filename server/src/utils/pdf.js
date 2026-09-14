@@ -1,7 +1,24 @@
+const fs = require('fs');
 const path = require('path');
 const PdfPrinter = require('pdfmake');
 
 const FONT_DIR = path.join(__dirname, '..', 'assets', 'fonts');
+const LOGO_PATH = path.join(__dirname, '..', 'assets', 'logo.png');
+const PAYNOW_PATH = path.join(__dirname, '..', 'assets', 'paynow.png');
+
+let logoBase64 = null;
+let paynowBase64 = null;
+
+try {
+  if (fs.existsSync(LOGO_PATH)) {
+    logoBase64 = `data:image/png;base64,${fs.readFileSync(LOGO_PATH).toString('base64')}`;
+  }
+  if (fs.existsSync(PAYNOW_PATH)) {
+    paynowBase64 = `data:image/png;base64,${fs.readFileSync(PAYNOW_PATH).toString('base64')}`;
+  }
+} catch (err) {
+  console.error('[pdf] Failed to read asset logos:', err.message);
+}
 
 const fonts = {
   Roboto: {
@@ -56,6 +73,12 @@ function buildPdf(docDefinition) {
 }
 
 function logoBlock() {
+  if (logoBase64) {
+    return {
+      image: logoBase64,
+      width: 175,
+    };
+  }
   return {
     columns: [
       {
@@ -86,6 +109,13 @@ function logoBlock() {
 }
 
 function payNowBadge() {
+  if (paynowBase64) {
+    return {
+      image: paynowBase64,
+      width: 140,
+      margin: [0, 5, 0, 4],
+    };
+  }
   return {
     columns: [
       { width: 'auto', text: 'PAYN', style: 'payNow' },

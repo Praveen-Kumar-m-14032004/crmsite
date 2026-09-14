@@ -222,21 +222,15 @@ h1, h2, h3, h4 { margin: 0; font-weight: 700; letter-spacing: -0.015em; }
 }
 .login-hint code { font-weight: 700; color: var(--purple-700); }
 
-/* Brand lockup (logo tile + wordmark) */
-.brand-lockup { display: inline-flex; align-items: center; gap: 11px; }
-.brand-tile {
-  width: 38px; height: 38px;
-  border-radius: 12px;
-  background: linear-gradient(140deg, var(--purple-600), var(--purple-700));
-  color: #fff;
-  display: inline-flex; align-items: center; justify-content: center;
-  box-shadow: var(--shadow-purple);
-  flex-shrink: 0;
+/* Brand lockup (official logo image) */
+.brand-lockup { display: inline-flex; align-items: center; }
+.brand-lockup img { display: block; max-width: 100%; height: auto; }
+.brand-lockup.on-dark img {
+  background: #ffffff;
+  padding: 6px 10px;
+  border-radius: var(--r-md);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
 }
-.brand-tile.on-dark { background: #fff; color: var(--purple-700); box-shadow: none; }
-.brand-text { display: flex; flex-direction: column; line-height: 1.05; }
-.brand-text strong { font-size: 15.5px; font-weight: 800; letter-spacing: -0.02em; }
-.brand-text span { font-size: 15.5px; font-weight: 800; letter-spacing: -0.02em; }
 
 /* ---------------------------------------------------------------
    App shell

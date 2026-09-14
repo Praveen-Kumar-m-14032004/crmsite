@@ -95,6 +95,14 @@ export default function AddInvoice() {
     [customers]
   );
 
+  const productOptions = useMemo(
+    () => (products || []).map((p) => ({
+      value: String(p.id),
+      label: p.productname,
+    })),
+    [products]
+  );
+
   const updateItem = (idx, field, value) =>
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [field]: value } : it)));
 
@@ -255,14 +263,18 @@ export default function AddInvoice() {
                 {items.map((item, idx) => (
                   <tr key={idx}>
                     <td>
-                      <select value={item.product_id} onChange={(e) => updateItem(idx, 'product_id', e.target.value)}>
-                        <option value="">Select…</option>
-                        {products.map((p) => <option key={p.id} value={p.id}>{p.productname}</option>)}
-                      </select>
+                      <SearchableSelect
+                        options={productOptions}
+                        value={item.product_id}
+                        onChange={(val) => updateItem(idx, 'product_id', val)}
+                        placeholder="Select product…"
+                      />
                     </td>
                     <td>
-                      <input value={item.description} onChange={(e) => updateItem(idx, 'description', e.target.value)}
-                        placeholder="Reference / remarks" />
+                      <input
+                        value={item.description}
+                        onChange={(e) => updateItem(idx, 'description', e.target.value)}
+                      />
                     </td>
                     <td>
                       <input type="number" step="0.01" min="0" inputMode="decimal" value={item.rate}

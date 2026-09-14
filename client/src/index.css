@@ -698,7 +698,6 @@ table.datatable td .cell-strong { font-weight: 600; color: var(--ink); }
 .line-items {
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
-  overflow: hidden;
   background: #fff;
 }
 .line-items-table { width: 100%; border-collapse: separate; border-spacing: 0; }

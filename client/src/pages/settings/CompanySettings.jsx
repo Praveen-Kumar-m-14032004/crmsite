@@ -90,7 +90,7 @@ export default function CompanySettings() {
                 </div>
                 <div className="form-field">
                   <label htmlFor="uen">UEN</label>
-                  <input id="uen" value={form.uen || ''} onChange={set('uen')} />
+                  <input id="uen" value={form.uen || ''} onChange={set('uen')} placeholder="201835067C" />
                 </div>
                 <div className="form-field">
                   <label htmlFor="currency">Default Currency</label>

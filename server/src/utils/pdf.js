@@ -106,6 +106,7 @@ function payNowBadge() {
 
 function invoicePdfDefinition(invoice, items, settings) {
   const currency = settings.default_currency || 'SGD';
+  const uenNumber = settings.uen || '201835067C';
   const manyItems = items.length >= 8;
 
   const itemRows = items.map((item, idx) => [
@@ -118,9 +119,10 @@ function invoicePdfDefinition(invoice, items, settings) {
   ]);
 
   const fromLines = [
-    { text: settings.company_name || '', style: 'partyName' },
+    { text: settings.company_name || 'Chola Logistics Pte Ltd', style: 'partyName' },
     { text: settings.address || '', style: 'partyLine' },
   ];
+  if (uenNumber) fromLines.push({ text: `UEN: ${uenNumber}`, style: 'partyLine' });
   const telLine = [
     settings.tel ? `Tel: ${settings.tel}` : null,
     settings.mobile ? `HP: ${settings.mobile}` : null,
@@ -209,7 +211,7 @@ function invoicePdfDefinition(invoice, items, settings) {
               { text: 'All Cheques should be crossed and made payable to', style: 'payLead' },
               { text: (settings.company_name || '').toUpperCase(), style: 'payee' },
               payNowBadge(),
-              { text: `UEN: ${settings.uen || ''}`, style: 'uen' },
+              { text: `UEN: ${uenNumber}`, style: 'uen' },
             ],
           },
           {

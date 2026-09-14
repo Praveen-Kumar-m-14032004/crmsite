@@ -37,7 +37,7 @@ async function main() {
   const permissionIds = new Map(permissionDocs.map((permission) => [permission.code, permission.id]));
   for (const [role_id, codes] of Object.entries(roleCodes)) for (const code of codes) await db.collection('role_permissions').updateOne({ _id: `${role_id}:${permissionIds.get(code)}` }, { $set: { role_id: Number(role_id), permission_id: permissionIds.get(code) } }, { upsert: true });
   for (let index = 0; index < products.length; index += 1) await db.collection('products').updateOne({ productname: products[index] }, { $setOnInsert: { id: index + 1, productname: products[index], created_at: now() } }, { upsert: true });
-  await db.collection('company_settings').updateOne({ _id: 'company_settings' }, { $setOnInsert: { id: 1, company_name: 'Chola Logistics Pte Ltd', default_currency: 'SGD', created_at: now() } }, { upsert: true });
+  await db.collection('company_settings').updateOne({ _id: 'company_settings' }, { $setOnInsert: { id: 1, company_name: 'Chola Logistics Pte Ltd', uen: '201835067C', default_currency: 'SGD', created_at: now() } }, { upsert: true });
   if (process.env.ADMIN_USERNAME && process.env.ADMIN_PASSWORD) {
     const password = await bcrypt.hash(process.env.ADMIN_PASSWORD, 10);
     await db.collection('users').updateOne({ username: process.env.ADMIN_USERNAME }, { $set: { password, username: process.env.ADMIN_USERNAME, role_id: 1, is_active: 1 }, $setOnInsert: { id: 1, name: 'System Admin', created_at: now() } }, { upsert: true });

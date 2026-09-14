@@ -144,34 +144,20 @@ export default function ManageInvoice() {
       key: 'sub_amount', label: `Total (${currency})`, sortable: true, align: 'right',
       render: (r) => <span className="num cell-strong">{Number(r.sub_amount).toFixed(2)}</span>,
     },
-    {
-      key: 'status', label: 'Status',
-      render: (row) => (can('invoices.edit') ? (
-        <select
-          className={`status-select ${statusClass(row.status)}`}
-          value={row.status || 'Pending'}
-          onChange={(e) => handleStatusChange(row, e.target.value)}
-          aria-label={`Status for invoice ${row.invoice_no}`}
-        >
-          {STATUS_OPTIONS.map((sVal) => <option key={sVal} value={sVal}>{sVal}</option>)}
-        </select>
-      ) : (
-        <span className="badge badge-info">{row.status}</span>
-      )),
-    },
+  
     {
       key: 'action', label: 'Action',
       render: (row) => (
         <div className="row-actions">
-          {can('invoices.edit') && (
-            <button className="btn-icon icon-edit-orange" title="Edit invoice" onClick={() => navigate(`/invoices/${row.id}/edit`)}>
-              <EditIcon width={15} height={15} />
-            </button>
-          )}
-          {can('invoices.print') && (
+           {can('invoices.print') && (
             <button className="btn-icon icon-print" title="Print / download PDF"
               disabled={printingId === row.id} onClick={() => handlePrint(row)}>
               {printingId === row.id ? <SpinnerIcon width={15} height={15} /> : <PrinterIcon width={15} height={15} />}
+            </button>
+          )}
+          {can('invoices.edit') && (
+            <button className="btn-icon icon-edit-orange" title="Edit invoice" onClick={() => navigate(`/invoices/${row.id}/edit`)}>
+              <EditIcon width={15} height={15} />
             </button>
           )}
           {can('invoices.delete') && (

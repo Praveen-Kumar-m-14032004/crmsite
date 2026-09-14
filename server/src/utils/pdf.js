@@ -31,7 +31,7 @@ const fonts = {
 
 const printer = new PdfPrinter(fonts);
 
-const PURPLE = '#6e2476';
+const PURPLE = '#6d2475';
 const INK = '#343a40';
 const MUTED = '#717684';
 const RULE = '#e2e4ea';

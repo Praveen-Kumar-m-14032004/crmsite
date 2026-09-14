@@ -102,11 +102,10 @@ export default function Reports() {
           <div className="form-grid">
             <div className="form-field">
               <label htmlFor="company">Company Name</label>
-              <input id="company" list="company-options" value={filters.company}
-                onChange={set('company')} placeholder="Any company" />
-              <datalist id="company-options">
-                {companies.map((c) => <option key={c.id} value={c.companyname} />)}
-              </datalist>
+              <select id="company" value={filters.company} onChange={set('company')}>
+                <option value="">Any company</option>
+                {companies.map((c) => <option key={c.id} value={c.companyname}>{c.companyname}</option>)}
+              </select>
             </div>
             <div className="form-field">
               <label htmlFor="start">Start Date</label>

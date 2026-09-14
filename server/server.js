@@ -1,4 +1,5 @@
 require('dotenv').config();
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 
@@ -47,6 +48,19 @@ app.get('/api/health', async (_req, res) => {
 });
 
 app.use('/api', (_req, res) => res.status(404).json({ message: 'Endpoint not found' }));
+
+// Serve React frontend in production
+const clientPath = path.join(__dirname, '..', 'client', 'dist');
+
+app.use(express.static(clientPath));
+
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    return next();
+  }
+
+  res.sendFile(path.join(clientPath, 'index.html'));
+});
 
 app.use((err, _req, res, _next) => {
   console.error(err);

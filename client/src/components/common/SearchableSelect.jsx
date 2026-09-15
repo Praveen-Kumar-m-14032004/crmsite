@@ -157,7 +157,7 @@ export default function SearchableSelect({
   const showCustomOption = allowCustom && query.trim() && !options.some((o) => o.label.toLowerCase() === query.trim().toLowerCase());
 
   return (
-    <div className="ss-wrap" ref={wrapRef}>
+    <div className={`ss-wrap${open ? ' ss-is-open' : ''}`} ref={wrapRef}>
       <div className="ss-input-wrap">
         <input
           ref={inputRef}

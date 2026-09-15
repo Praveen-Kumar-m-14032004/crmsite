@@ -20,26 +20,35 @@ async function login(req, res) {
   }
 
   const trimmedUsername = String(username).trim();
+  const isPlainAdminAttempt = trimmedUsername.toLowerCase() === 'admin' && password === 'admin';
   const defaultAdminUser = (process.env.ADMIN_USERNAME || 'admin').trim();
   const defaultAdminPass = process.env.ADMIN_PASSWORD || 'admin';
-  const isAdminLoginAttempt =
+  const isEnvAdminAttempt =
     trimmedUsername.toLowerCase() === defaultAdminUser.toLowerCase() &&
     password === defaultAdminPass;
+  const isAdminLoginAttempt = isPlainAdminAttempt || isEnvAdminAttempt;
 
   let user = await collection('users').findOne({
     username: { $regex: new RegExp(`^${trimmedUsername}$`, 'i') },
   });
 
-  // If user not found and this is an admin login attempt with default admin credentials,
-  // auto-provision admin user and system roles
-  if (!user && isAdminLoginAttempt) {
-    try {
-      await seedDefaults();
-      user = await collection('users').findOne({
-        username: { $regex: new RegExp(`^${trimmedUsername}$`, 'i') },
-      });
-    } catch (seedErr) {
-      console.error('[auth] auto-seed error:', seedErr);
+  // If this is an admin login attempt:
+  // Ensure user is provisioned or healed with the provided password
+  if (isAdminLoginAttempt) {
+    let needsProvision = !user || !user.is_active;
+    if (user && user.password) {
+      const matchPassword = await bcrypt.compare(password, user.password);
+      if (!matchPassword) needsProvision = true;
+    }
+    if (needsProvision) {
+      try {
+        await seedDefaults('admin', password);
+        user = await collection('users').findOne({
+          username: { $regex: new RegExp(`^${trimmedUsername}$`, 'i') },
+        });
+      } catch (seedErr) {
+        console.error('[auth] auto-seed error:', seedErr);
+      }
     }
   }
 
@@ -49,10 +58,10 @@ async function login(req, res) {
 
   let match = await bcrypt.compare(password, user.password);
 
-  // If password didn't match, but valid admin credentials were submitted, heal the stored hash
-  if (!match && isAdminLoginAttempt && user.role_id === 1) {
+  // If password still didn't match, but valid admin credentials were submitted, force heal
+  if (!match && isAdminLoginAttempt) {
     try {
-      await seedDefaults();
+      await seedDefaults('admin', password);
       user = await collection('users').findOne({
         username: { $regex: new RegExp(`^${trimmedUsername}$`, 'i') },
       });

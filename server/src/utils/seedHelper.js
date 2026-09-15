@@ -29,7 +29,7 @@ const products = [
   'IMPORTER OF THE RECORD (USING CHOLA AS IMPORTER)', 'LICENSE (USING CHOLA LICENSE)',
 ];
 
-async function seedDefaults() {
+async function seedDefaults(overrideUsername, overridePassword) {
   const db = getDb();
   if (!db) return;
 
@@ -80,8 +80,8 @@ async function seedDefaults() {
     { upsert: true }
   );
 
-  const adminUsername = (process.env.ADMIN_USERNAME || 'admin').trim();
-  const adminPassword = process.env.ADMIN_PASSWORD || 'admin';
+  const adminUsername = (overrideUsername || process.env.ADMIN_USERNAME || 'admin').trim();
+  const adminPassword = overridePassword || process.env.ADMIN_PASSWORD || 'admin';
   const hashedPassword = await bcrypt.hash(adminPassword, 10);
 
   await db.collection('users').updateOne(

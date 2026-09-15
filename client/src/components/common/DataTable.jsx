@@ -69,12 +69,30 @@ export default function DataTable({
                   onClick={() => col.sortable && onSort(col.key)}
                   style={col.align ? { textAlign: col.align } : undefined}
                 >
-                  {col.label}
-                  {col.sortable && (
-                    <span className={`sort-ind ${sort === col.key ? 'on' : ''}`}>
-                      {sort === col.key ? (dir === 'asc' ? '▲' : '▼') : '▲'}
-                    </span>
-                  )}
+                  <div
+                    className="th-content"
+                    style={
+                      col.align === 'right'
+                        ? { justifyContent: 'flex-end' }
+                        : col.align === 'center'
+                        ? { justifyContent: 'center' }
+                        : undefined
+                    }
+                  >
+                    <span>{col.label}</span>
+                    {col.sortable && (
+                      <span className={`sort-ind ${sort === col.key ? 'on' : ''}`}>
+                        {sort === col.key ? (
+                          <span className="sort-arrow">{dir === 'asc' ? '▲' : '▼'}</span>
+                        ) : (
+                          <span className="sort-both" aria-hidden="true">
+                            <span className="arrow-up">▲</span>
+                            <span className="arrow-down">▼</span>
+                          </span>
+                        )}
+                      </span>
+                    )}
+                  </div>
                 </th>
               ))}
             </tr>

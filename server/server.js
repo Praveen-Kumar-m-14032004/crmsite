@@ -4,10 +4,10 @@ const express = require('express');
 const cors = require('cors');
 
 if (!process.env.JWT_SECRET) {
+  process.env.JWT_SECRET = 'permit-declaration-secret-da41d4f289e9d0410ad09455e84f577c';
   if (process.env.NODE_ENV === 'production') {
-    throw new Error('JWT_SECRET must be set in production');
+    console.warn('[warning] JWT_SECRET not provided; using fallback default secret.');
   }
-  process.env.JWT_SECRET = 'local-development-jwt-secret';
 }
 
 const { connect, getDb, close, mongoDatabaseName } = require('./src/config/db');
@@ -24,7 +24,10 @@ const settingsRoutes = require('./src/routes/settings');
 
 const app = express();
 
-app.use(cors({ origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173' }));
+app.use(cors({
+  origin: (origin, callback) => callback(null, true),
+  credentials: true,
+}));
 app.use(express.json());
 
 app.use('/api/auth', authRoutes);
@@ -84,13 +87,21 @@ app.use((err, _req, res, _next) => {
   res.status(err.status || 500).json({ message: err.message || 'Internal server error' });
 });
 
-const PORT = Number(process.env.PORT) || 5000;
+const PORT = process.env.PORT || 5000;
 
 async function start() {
   try {
     await connect();
     await getDb().command({ ping: 1 });
     console.log(`[db] connected to MongoDB database ${mongoDatabaseName()}`);
+
+    try {
+      const { seedDefaults } = require('./src/utils/seedHelper');
+      await seedDefaults();
+      console.log('[seed] default roles, permissions, settings and admin user verified');
+    } catch (seedErr) {
+      console.warn('[seed] warning: auto-seed had error:', seedErr.message);
+    }
   } catch (err) {
     console.error('\n[db] Could not connect to MongoDB.');
     console.error(`     ${err.code || ''} ${err.message}`);

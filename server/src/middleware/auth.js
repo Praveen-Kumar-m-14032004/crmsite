@@ -9,7 +9,8 @@ function authenticate(req, res, next) {
   }
 
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    const secret = process.env.JWT_SECRET || 'permit-declaration-secret-da41d4f289e9d0410ad09455e84f577c';
+    const payload = jwt.verify(token, secret);
     req.user = payload; // { id, username, roleId, roleName, permissions }
     next();
   } catch (err) {

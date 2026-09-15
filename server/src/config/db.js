@@ -2,6 +2,9 @@ require('dotenv').config();
 
 const { MongoClient } = require('mongodb');
 
+const DEFAULT_MONGODB_URI =
+  'mongodb://praveenkumarm14032004_db_user:I4Gvfb5uFcCvcjy8@ac-yned1yg-shard-00-00.8ybyvlz.mongodb.net:27017,ac-yned1yg-shard-00-01.8ybyvlz.mongodb.net:27017,ac-yned1yg-shard-00-02.8ybyvlz.mongodb.net:27017/permit_declaration?ssl=true&replicaSet=atlas-v8zcw3-shard-0&authSource=admin&retryWrites=true&w=majority';
+
 let client;
 let database;
 
@@ -9,11 +12,16 @@ function mongoDatabaseName() {
   return process.env.MONGODB_DB || 'permit_declaration';
 }
 
+function getMongoUri() {
+  return process.env.MONGODB_URI || DEFAULT_MONGODB_URI;
+}
+
 async function connect() {
-  if (!process.env.MONGODB_URI) throw new Error('MONGODB_URI must be set');
+  const uri = getMongoUri();
+  if (!uri) throw new Error('MONGODB_URI must be set');
   if (database) return database;
 
-  client = new MongoClient(process.env.MONGODB_URI, {
+  client = new MongoClient(uri, {
     maxPoolSize: Number(process.env.MONGODB_POOL_SIZE) || 20,
     serverSelectionTimeoutMS: Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS) || 5000,
   });

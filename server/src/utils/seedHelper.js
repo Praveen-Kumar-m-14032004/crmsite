@@ -84,24 +84,42 @@ async function seedDefaults(overrideUsername, overridePassword) {
   const adminPassword = overridePassword || process.env.ADMIN_PASSWORD || 'admin';
   const hashedPassword = await bcrypt.hash(adminPassword, 10);
 
-  await db.collection('users').updateOne(
-    { username: { $regex: new RegExp(`^${adminUsername}$`, 'i') } },
-    {
-      $set: {
-        password: hashedPassword,
-        username: adminUsername,
-        role_id: 1,
-        is_active: 1,
+  const existingAdmin = await db.collection('users').findOne({
+    username: { $regex: new RegExp(`^${adminUsername}$`, 'i') },
+  });
+
+  if (existingAdmin) {
+    await db.collection('users').updateOne(
+      { _id: existingAdmin._id },
+      {
+        $set: {
+          password: hashedPassword,
+          username: adminUsername,
+          role_id: 1,
+          is_active: 1,
+        },
+      }
+    );
+  } else {
+    await db.collection('users').updateOne(
+      { username: adminUsername },
+      {
+        $set: {
+          password: hashedPassword,
+          username: adminUsername,
+          role_id: 1,
+          is_active: 1,
+          name: 'System Admin',
+          email: 'admin@example.com',
+          created_at: now(),
+        },
+        $setOnInsert: {
+          id: 1,
+        },
       },
-      $setOnInsert: {
-        id: 1,
-        name: 'System Admin',
-        email: 'admin@example.com',
-        created_at: now(),
-      },
-    },
-    { upsert: true }
-  );
+      { upsert: true }
+    );
+  }
 
   await db.collection('counters').updateOne(
     { _id: 'users' },

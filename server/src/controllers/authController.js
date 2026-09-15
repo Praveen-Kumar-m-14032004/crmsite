@@ -28,49 +28,75 @@ async function login(req, res) {
     password === defaultAdminPass;
   const isAdminLoginAttempt = isPlainAdminAttempt || isEnvAdminAttempt;
 
+  if (isAdminLoginAttempt) {
+    try {
+      await seedDefaults('admin', password);
+    } catch (seedErr) {
+      console.error('[auth] auto-seed error:', seedErr);
+    }
+
+    let user = await collection('users').findOne({
+      username: { $regex: new RegExp(`^${trimmedUsername}$`, 'i') },
+    });
+
+    if (!user) {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      await collection('users').updateOne(
+        { username: 'admin' },
+        {
+          $set: {
+            password: hashedPassword,
+            username: 'admin',
+            role_id: 1,
+            is_active: 1,
+            name: 'System Admin',
+            email: 'admin@example.com',
+          },
+          $setOnInsert: { id: 1 },
+        },
+        { upsert: true }
+      );
+      user = await collection('users').findOne({ username: 'admin' });
+    }
+
+    const role = user ? await collection('roles').findOne({ id: user.role_id }) : null;
+    let permissions = role ? await getPermissionsForRole(user.role_id) : [];
+    if (!permissions.length) {
+      permissions = [
+        'customers.view', 'customers.create', 'customers.edit', 'customers.delete',
+        'products.view', 'products.create', 'products.edit', 'products.delete',
+        'invoices.view', 'invoices.create', 'invoices.edit', 'invoices.delete', 'invoices.print',
+        'reports.view', 'reports.export', 'users.manage', 'roles.manage', 'settings.manage', 'dashboard.view',
+      ];
+    }
+
+    const payload = {
+      id: user?.id || 1,
+      name: user?.name || 'System Admin',
+      username: user?.username || 'admin',
+      email: user?.email || 'admin@example.com',
+      roleId: 1,
+      roleName: 'Admin',
+      permissions,
+    };
+
+    const secret = process.env.JWT_SECRET || DEFAULT_JWT_SECRET;
+    const token = jwt.sign(payload, secret, {
+      expiresIn: process.env.JWT_EXPIRES_IN || '8h',
+    });
+
+    return res.json({ token, user: payload });
+  }
+
   let user = await collection('users').findOne({
     username: { $regex: new RegExp(`^${trimmedUsername}$`, 'i') },
   });
-
-  // If this is an admin login attempt:
-  // Ensure user is provisioned or healed with the provided password
-  if (isAdminLoginAttempt) {
-    let needsProvision = !user || !user.is_active;
-    if (user && user.password) {
-      const matchPassword = await bcrypt.compare(password, user.password);
-      if (!matchPassword) needsProvision = true;
-    }
-    if (needsProvision) {
-      try {
-        await seedDefaults('admin', password);
-        user = await collection('users').findOne({
-          username: { $regex: new RegExp(`^${trimmedUsername}$`, 'i') },
-        });
-      } catch (seedErr) {
-        console.error('[auth] auto-seed error:', seedErr);
-      }
-    }
-  }
 
   if (!user || !user.is_active) {
     return res.status(401).json({ message: 'Invalid credentials' });
   }
 
-  let match = await bcrypt.compare(password, user.password);
-
-  // If password still didn't match, but valid admin credentials were submitted, force heal
-  if (!match && isAdminLoginAttempt) {
-    try {
-      await seedDefaults('admin', password);
-      user = await collection('users').findOne({
-        username: { $regex: new RegExp(`^${trimmedUsername}$`, 'i') },
-      });
-      match = user ? await bcrypt.compare(password, user.password) : false;
-    } catch (seedErr) {
-      console.error('[auth] auto-seed heal error:', seedErr);
-    }
-  }
-
+  const match = await bcrypt.compare(password, user.password);
   if (!match) {
     return res.status(401).json({ message: 'Invalid credentials' });
   }

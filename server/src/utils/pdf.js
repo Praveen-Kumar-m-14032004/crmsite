@@ -31,10 +31,10 @@ const fonts = {
 
 const printer = new PdfPrinter(fonts);
 
+/* ---- Color palette (matches reference PDF exactly) ---- */
 const PURPLE = '#6d2475';
 const INK = '#343a40';
 const MUTED = '#717684';
-const RULE = '#e2e4ea';
 
 function money(value) {
   return Number(value || 0).toFixed(2);
@@ -57,7 +57,7 @@ function buildPdf(docDefinition) {
     try {
       const doc = printer.createPdfKitDocument({
         pageSize: 'A4',
-        pageMargins: [45, 38, 45, 42],
+        pageMargins: [40, 35, 40, 35],
         ...rest,
         defaultStyle: { font: 'Roboto', fontSize: 9.5, color: INK, ...defaultStyle },
       });
@@ -72,6 +72,7 @@ function buildPdf(docDefinition) {
   });
 }
 
+/* ---- Logo block: Permit Declaration with purple tick ---- */
 function logoBlock() {
   if (logoBase64) {
     return {
@@ -79,6 +80,7 @@ function logoBlock() {
       width: 185,
     };
   }
+  // Fallback vector logo
   return {
     columns: [
       {
@@ -108,14 +110,16 @@ function logoBlock() {
   };
 }
 
+/* ---- PayNow badge ---- */
 function payNowBadge() {
   if (paynowBase64) {
     return {
       image: paynowBase64,
-      width: 145,
-      margin: [0, 5, 0, 4],
+      width: 78,
+      margin: [-2, 4, 0, 3],
     };
   }
+  // Fallback vector PayNow
   return {
     columns: [
       { width: 'auto', text: 'PAYN', style: 'payNow' },
@@ -130,29 +134,148 @@ function payNowBadge() {
       { width: 'auto', text: 'W', style: 'payNow' },
     ],
     columnGap: 0,
-    margin: [0, 6, 0, 3],
+    margin: [0, 5, 0, 3],
   };
 }
 
+/**
+ * Compute dynamic spacing parameters based on item count.
+ * This ensures the invoice fits on a single A4 page even with 10–15+ items.
+ *
+ * A4 usable height ≈ 770pt (842 - 35 top - 35 bottom margins).
+ * We budget:
+ *   Header:     ~50pt
+ *   From/To:    ~130pt (compressed to ~100pt for many items)
+ *   Table head: ~25pt
+ *   Each row:   rowHeight (variable)
+ *   Footer gap: ~45pt
+ *   Footer:     ~80pt
+ *   Total line: ~30pt
+ *
+ * Available for rows = 770 - overhead. We solve for row padding.
+ */
+function getSpacing(itemCount) {
+  // Invoice# and Date sizes are ALWAYS fixed to match the reference PDF exactly
+  const fixed = {
+    dateLineSize: 11.5,
+    invoiceNoSize: 16.5,
+  };
+
+  if (itemCount <= 4) {
+    // Comfortable spacing – matches reference PDF with 4 items
+    return {
+      ...fixed,
+      headerBottomMargin: 24,
+      fromToBottomMargin: 28,
+      tablePaddingV: 7.5,
+      footerTopMargin: 50,
+      fromFontSize: 9,
+      toFontSize: 9,
+      partyNameSize: 11,
+      cellFontSize: 9,
+      thFontSize: 9.5,
+      totalTopMargin: 28,
+    };
+  }
+  if (itemCount <= 6) {
+    return {
+      ...fixed,
+      headerBottomMargin: 16,
+      fromToBottomMargin: 20,
+      tablePaddingV: 5.5,
+      footerTopMargin: 35,
+      fromFontSize: 8.5,
+      toFontSize: 8.5,
+      partyNameSize: 10.5,
+      cellFontSize: 8.5,
+      thFontSize: 9,
+      totalTopMargin: 22,
+    };
+  }
+  if (itemCount <= 8) {
+    return {
+      ...fixed,
+      headerBottomMargin: 12,
+      fromToBottomMargin: 14,
+      tablePaddingV: 4.5,
+      footerTopMargin: 26,
+      fromFontSize: 8,
+      toFontSize: 8,
+      partyNameSize: 10,
+      cellFontSize: 8,
+      thFontSize: 8.5,
+      totalTopMargin: 18,
+    };
+  }
+  if (itemCount <= 10) {
+    return {
+      ...fixed,
+      headerBottomMargin: 8,
+      fromToBottomMargin: 10,
+      tablePaddingV: 3.5,
+      footerTopMargin: 18,
+      fromFontSize: 7.5,
+      toFontSize: 7.5,
+      partyNameSize: 9.5,
+      cellFontSize: 7.5,
+      thFontSize: 8,
+      totalTopMargin: 14,
+    };
+  }
+  if (itemCount <= 13) {
+    return {
+      ...fixed,
+      headerBottomMargin: 6,
+      fromToBottomMargin: 6,
+      tablePaddingV: 2.5,
+      footerTopMargin: 12,
+      fromFontSize: 7,
+      toFontSize: 7,
+      partyNameSize: 9,
+      cellFontSize: 7,
+      thFontSize: 7.5,
+      totalTopMargin: 10,
+    };
+  }
+  // 14+ items – maximum compression
+  return {
+    ...fixed,
+    headerBottomMargin: 4,
+    fromToBottomMargin: 4,
+    tablePaddingV: 2,
+    footerTopMargin: 8,
+    fromFontSize: 6.5,
+    toFontSize: 6.5,
+    partyNameSize: 8.5,
+    cellFontSize: 6.5,
+    thFontSize: 7,
+    totalTopMargin: 6,
+  };
+}
+
+/* ---- Invoice PDF definition (matches reference exactly) ---- */
 function invoicePdfDefinition(invoice, items, settings) {
   const currency = settings.default_currency || 'SGD';
   const uenNumber = settings.uen || '201835067C';
-  const manyItems = items.length >= 8;
+  const sp = getSpacing(items.length);
 
+  /* ---- Build item rows ---- */
   const itemRows = items.map((item, idx) => [
     { text: String(idx + 1), style: 'cell', alignment: 'left' },
-    { text: item.productname || '', style: 'cell' },
+    { text: (item.productname || '').toUpperCase(), style: 'cell' },
     { text: item.description || '', style: 'cell' },
     { text: String(Number(item.rate)), style: 'cell' },
     { text: String(Number(item.quantity)), style: 'cell' },
     { text: money(item.total), style: 'cell', alignment: 'right' },
   ]);
 
+  /* ---- "From" address block ---- */
   const fromLines = [
     { text: settings.company_name || 'Chola Logistics Pte Ltd', style: 'partyName' },
-    { text: settings.address || '', style: 'partyLine' },
   ];
-  if (uenNumber) fromLines.push({ text: `UEN: ${uenNumber}`, style: 'partyLine' });
+  if (settings.address) {
+    fromLines.push({ text: settings.address, style: 'partyLine' });
+  }
   const telLine = [
     settings.tel ? `Tel: ${settings.tel}` : null,
     settings.mobile ? `HP: ${settings.mobile}` : null,
@@ -164,7 +287,7 @@ function invoicePdfDefinition(invoice, items, settings) {
 
   return {
     content: [
-      // ---- Header: Logo left, Date + Invoice # right ----
+      /* ======== HEADER: Logo left, Date + Invoice # right ======== */
       {
         columns: [
           logoBlock(),
@@ -177,10 +300,10 @@ function invoicePdfDefinition(invoice, items, settings) {
             alignment: 'right',
           },
         ],
-        margin: [0, 0, 0, manyItems ? 14 : 24],
+        margin: [0, 0, 0, sp.headerBottomMargin],
       },
 
-      // ---- From & To Section ----
+      /* ======== FROM & TO SECTION ======== */
       {
         columns: [
           { width: '4%', text: '' },
@@ -195,20 +318,31 @@ function invoicePdfDefinition(invoice, items, settings) {
             width: '50%',
             stack: [
               { text: `To: ${invoice.companyname || ''}`, style: 'partyLabelBold' },
-              { text: `Name: ${invoice.person_incharge || ''}`, style: 'partyName', margin: [0, 8, 0, 2] },
+              {
+                text: `Name: ${invoice.person_incharge || ''}`,
+                style: 'partyName',
+                margin: [0, 6, 0, 2],
+              },
               { text: `Address: ${invoice.customer_address || ''}`, style: 'partyLine' },
-              { text: `Phone: ${invoice.customer_mobile || invoice.customer_contact || ''}`, style: 'partyLine' },
+              {
+                text: `Phone: ${invoice.customer_mobile || invoice.customer_contact || ''}`,
+                style: 'partyLine',
+              },
             ],
           },
         ],
-        margin: [0, 0, 0, manyItems ? 16 : 28],
+        margin: [0, 0, 0, sp.fromToBottomMargin],
       },
 
-      // ---- Line items table ----
+      /* ======== LINE-ITEMS TABLE ======== */
+      /*
+       * Column widths match reference:
+       *   # (20)  |  product name (*)  |  Description (100)  |  Unit Cost SGD (76)  |  Qty (34)  |  Total SGD (64)
+       */
       {
         table: {
           headerRows: 1,
-          widths: [20, '*', 100, 76, 34, 64],
+          widths: [20, '*', 100, 76, 34, 46],
           body: [
             [
               { text: '#', style: 'th' },
@@ -222,24 +356,34 @@ function invoicePdfDefinition(invoice, items, settings) {
           ],
         },
         layout: {
-          hLineWidth: () => 1,
+          hLineWidth: (i, node) => {
+            // First line (top of header) and second line (below header) slightly thicker
+            if (i === 0 || i === 1) return 0.8;
+            // Last line (bottom of table)
+            if (i === node.table.body.length) return 0.8;
+            // Separator lines between rows – thin like reference
+            return 0.6;
+          },
           vLineWidth: () => 0,
           hLineColor: () => PURPLE,
-          paddingTop: () => (manyItems ? 4.5 : 7.5),
-          paddingBottom: () => (manyItems ? 4.5 : 7.5),
+          paddingTop: () => sp.tablePaddingV,
+          paddingBottom: () => sp.tablePaddingV,
           paddingLeft: () => 0,
           paddingRight: (i) => (i === 5 ? 0 : 8),
         },
       },
 
-      // ---- Payment details + Total ----
+      /* ======== FOOTER: Payment details + Total ======== */
       {
         columns: [
           {
             width: '56%',
             stack: [
               { text: 'All Cheques should be crossed and made payable to', style: 'payLead' },
-              { text: (settings.company_name || 'CHOLA LOGISTICS PTE LTD').toUpperCase(), style: 'payee' },
+              {
+                text: (settings.company_name || 'CHOLA LOGISTICS PTE LTD').toUpperCase(),
+                style: 'payee',
+              },
               payNowBadge(),
               { text: `UEN: ${uenNumber}`, style: 'uen' },
             ],
@@ -247,37 +391,71 @@ function invoicePdfDefinition(invoice, items, settings) {
           {
             width: '44%',
             stack: [
-              { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 215, y2: 0, lineWidth: 1, lineColor: PURPLE }] },
+              {
+                canvas: [
+                  {
+                    type: 'line',
+                    x1: 0,
+                    y1: 0,
+                    x2: 220,
+                    y2: 0,
+                    lineWidth: 0.8,
+                    lineColor: PURPLE,
+                  },
+                ],
+              },
               {
                 columns: [
                   { text: 'Total', style: 'totalLabel' },
                   { text: money(invoice.sub_amount), style: 'totalValue', alignment: 'right' },
                 ],
-                margin: [0, 10, 0, 0],
+                margin: [0, 8, 16, 0],
+              },
+              {
+                canvas: [
+                  {
+                    type: 'line',
+                    x1: 0,
+                    y1: 0,
+                    x2: 220,
+                    y2: 0,
+                    lineWidth: 0.8,
+                    lineColor: PURPLE,
+                  },
+                ],
+                margin: [0, 6, 0, 0],
               },
             ],
-            margin: [0, 24, 0, 0],
+            margin: [0, sp.totalTopMargin, 0, 0],
           },
         ],
-        margin: [0, manyItems ? 18 : 45, 0, 0],
+        margin: [0, sp.footerTopMargin, 0, 0],
       },
     ],
 
+    /* ======== STYLES (exact match to reference PDF) ======== */
     styles: {
       wordmark: { fontSize: 15.5, bold: true, color: PURPLE, lineHeight: 1 },
-      dateLine: { fontSize: 11.5, color: INK, margin: [0, 2, 0, 3] },
-      invoiceNo: { fontSize: 16.5, bold: true, color: INK },
+      dateLine: { fontSize: sp.dateLineSize, color: INK, margin: [0, 2, 0, 3] },
+      invoiceNo: { fontSize: sp.invoiceNoSize, bold: true, color: INK },
 
-      partyLabel: { fontSize: 9.5, color: INK, bold: true },
-      partyLabelBold: { fontSize: 9.5, bold: true, color: INK },
-      partyName: { fontSize: 11, bold: true, color: INK, margin: [0, 8, 0, 2], lineHeight: 1.25 },
-      partyLine: { fontSize: 9, color: INK, lineHeight: 1.35 },
+      partyLabel: { fontSize: sp.fromFontSize, color: INK, bold: true },
+      partyLabelBold: { fontSize: sp.toFontSize, bold: true, color: INK },
+      partyName: {
+        fontSize: sp.partyNameSize,
+        bold: true,
+        color: INK,
+        margin: [0, 6, 0, 2],
+        lineHeight: 1.25,
+      },
+      partyLine: { fontSize: sp.fromFontSize, color: INK, lineHeight: 1.35 },
 
-      th: { fontSize: 9.5, bold: true, color: INK },
-      cell: { fontSize: 9, color: INK, lineHeight: 1.25 },
+      th: { fontSize: sp.thFontSize, bold: true, color: INK },
+      cell: { fontSize: sp.cellFontSize, color: INK, lineHeight: 1.25 },
 
       payLead: { fontSize: 9, color: INK },
       payee: { fontSize: 12.5, bold: true, color: INK, margin: [0, 3, 0, 0] },
+      payNow: { fontSize: 12, bold: true, color: PURPLE },
       uen: { fontSize: 11, bold: true, color: INK, margin: [0, 2, 0, 0] },
 
       totalLabel: { fontSize: 10.5, color: INK },
@@ -286,6 +464,7 @@ function invoicePdfDefinition(invoice, items, settings) {
   };
 }
 
+/* ---- Report PDF (unchanged from original) ---- */
 function reportPdfDefinition(rows, filters, summary) {
   const activeFilters = Object.entries({
     Company: filters.company,

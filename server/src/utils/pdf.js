@@ -48,12 +48,19 @@ function money(value) {
 
 function formatDate(d) {
   if (!d) return '—';
-  if (typeof d === 'string') return d.slice(0, 10);
+  if (typeof d === 'string') {
+    const raw = d.slice(0, 10);
+    const parts = raw.split('-');
+    if (parts.length === 3 && parts[0].length === 4) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+  }
   const date = new Date(d);
+  if (isNaN(date.getTime())) return String(d);
   const yyyy = date.getFullYear();
   const mm = String(date.getMonth() + 1).padStart(2, '0');
   const dd = String(date.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
+  return `${dd}/${mm}/${yyyy}`;
 }
 
 function buildPdf(docDefinition) {

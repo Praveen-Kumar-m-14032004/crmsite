@@ -284,38 +284,61 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
   if (settings.contact_no) fromLines.push({ text: `Contact: ${settings.contact_no}`, style: 'partyLine' });
 
   return {
+    background: (currentPage, pageSize) => {
+      if (logoBase64) {
+        return [
+          {
+            image: logoBase64,
+            width: 300,
+            opacity: 0.08,
+            absolutePosition: {
+              x: (pageSize.width - 300) / 2,
+              y: (pageSize.height - 180) / 2,
+            },
+          },
+        ];
+      }
+      return null;
+    },
+    footer: (currentPage, pageCount) => ({
+      text: 'This is a system generated invoice no authorized signature needed.',
+      style: 'footerNotice',
+      alignment: 'center',
+      margin: [40, 10, 40, 0],
+    }),
     content: [
-      /* ======== HEADER: Logo left, Date + Invoice # aligned with To section column ======== */
+      /* ======== HEADER: Logo left, Date + Invoice # right ======== */
       {
         columns: [
           {
-            width: 290,
+            width: 260,
             stack: [logoBlock()],
           },
           {
-            width: 225,
+            width: '*',
             stack: [
               { text: `Date: ${formatDate(invoice.invoice_date)}`, style: 'dateLine' },
               { text: formattedInvoiceNo, style: 'invoiceNo' },
             ],
+            alignment: 'right',
           },
         ],
         margin: [0, 0, 0, sp.headerBottomMargin],
       },
 
-      /* ======== FROM & TO SECTION ======== */
+      /* ======== FROM & TO SECTION: From aligned with logo, To moved to right ======== */
       {
         columns: [
-          { width: 125, text: '' },
           {
-            width: 140,
+            width: 240,
             stack: [
               { text: 'From:', style: 'partyLabel' },
               ...fromLines,
             ],
           },
+          { width: 30, text: '' },
           {
-            width: 250,
+            width: 245,
             stack: [
               { text: `To: ${invoice.companyname || ''}`, style: 'partyLabel' },
               {
@@ -442,6 +465,7 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
 
       totalLabel: { fontSize: 10, color: INK },
       totalValue: { fontSize: 10.5, bold: true, color: INK },
+      footerNotice: { fontSize: 7.5, color: MUTED, italics: true },
     },
   };
 }
@@ -476,6 +500,28 @@ function reportPdfDefinition(rows, filters, summary) {
 
   return {
     pageOrientation: 'landscape',
+    background: (currentPage, pageSize) => {
+      if (logoBase64) {
+        return [
+          {
+            image: logoBase64,
+            width: 360,
+            opacity: 0.08,
+            absolutePosition: {
+              x: (pageSize.width - 360) / 2,
+              y: (pageSize.height - 200) / 2,
+            },
+          },
+        ];
+      }
+      return null;
+    },
+    footer: (currentPage, pageCount) => ({
+      text: 'This is a system generated invoice no authorized signature needed.',
+      style: 'footerNotice',
+      alignment: 'center',
+      margin: [40, 10, 40, 0],
+    }),
     content: [
       {
         columns: [
@@ -522,6 +568,7 @@ function reportPdfDefinition(rows, filters, summary) {
       cell: { fontSize: 8.5, color: INK },
       summary: { fontSize: 9.5, bold: true, color: INK },
       payNow: { fontSize: 12, bold: true, color: PURPLE },
+      footerNotice: { fontSize: 7.5, color: MUTED, italics: true },
     },
     defaultStyle: { fontSize: 8.5 },
   };

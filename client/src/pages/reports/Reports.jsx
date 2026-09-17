@@ -133,7 +133,7 @@ export default function Reports() {
             <div className="form-field">
               <label htmlFor="istatus">Invoice Status</label>
               <select id="istatus" value={filters.status} onChange={set('status')}>
-                <option>All</option><option>Paid</option><option>Pending</option><option>Cancelled</option>
+                <option>All</option><option>Paid</option><option>Unpaid</option><option>Cancelled</option>
               </select>
             </div>
             <div className="form-field">
@@ -192,7 +192,7 @@ export default function Reports() {
                 <tr>
                   <th>Invoice No</th>
                   <th>Invoice Date</th>
-                  <th>Company</th>
+                  <th>Company Name</th>
                   <th style={{ textAlign: 'right' }}>Sub Amount</th>
                   <th style={{ textAlign: 'center' }}>Status</th>
                 </tr>
@@ -214,7 +214,7 @@ export default function Reports() {
                     <td className="num">{formatDateDMY(r.invoice_date)}</td>
                     <td>{r.companyname}</td>
                     <td className="num" style={{ textAlign: 'right' }}>{Number(r.sub_amount).toFixed(2)}</td>
-                    <td style={{ textAlign: 'center' }}><span className="badge badge-neutral">{r.status}</span></td>
+                    <td style={{ textAlign: 'center' }}><span className="badge badge-neutral">{r.status === 'Pending' ? 'Unpaid' : r.status}</span></td>
                   </tr>
                 ))}
               </tbody>

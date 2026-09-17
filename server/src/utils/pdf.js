@@ -421,7 +421,7 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
       {
         stack: [
           { text: 'Payment is due and payable under the terms and conditions of contract', style: 'termsLead', alignment: 'center' },
-          { text: 'This is a computer generated document, no signature required', style: 'termsSub', alignment: 'center' },
+          { text: 'This is a system generated invoice no authorized signature needed.', style: 'termsSub', alignment: 'center' },
         ],
         margin: [0, 24, 0, 0],
       },
@@ -453,8 +453,8 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
 
       totalLabel: { fontSize: 10, color: INK },
       totalValue: { fontSize: 10.5, bold: true, color: INK },
-      termsLead: { fontSize: 8.5, color: INK, margin: [0, 0, 0, 2] },
-      termsSub: { fontSize: 7.5, color: MUTED, italics: true },
+      termsLead: { fontSize: 10, color: INK, margin: [0, 0, 0, 3], bold: true },
+      termsSub: { fontSize: 10, color: MUTED, italics: true },
     },
   };
 }
@@ -474,7 +474,7 @@ function reportPdfDefinition(rows, filters, summary) {
     [
       { text: 'Invoice No', style: 'th', alignment: 'left', color: '#ffffff', bold: true },
       { text: 'Invoice Date', style: 'th', alignment: 'left', color: '#ffffff', bold: true },
-      { text: 'Company', style: 'th', alignment: 'left', color: '#ffffff', bold: true },
+      { text: 'Company Name', style: 'th', alignment: 'left', color: '#ffffff', bold: true },
       { text: 'Sub Amount', style: 'th', alignment: 'right', color: '#ffffff', bold: true },
       { text: 'Status', style: 'th', alignment: 'center', color: '#ffffff', bold: true },
     ],
@@ -483,7 +483,7 @@ function reportPdfDefinition(rows, filters, summary) {
       { text: formatDate(r.invoice_date), style: 'cell', alignment: 'left' },
       { text: r.companyname, style: 'cell', alignment: 'left' },
       { text: money(r.sub_amount), style: 'cell', alignment: 'right' },
-      { text: r.status || '', style: 'cell', alignment: 'center' },
+      { text: r.status === 'Pending' ? 'Unpaid' : (r.status || ''), style: 'cell', alignment: 'center' },
     ]),
   ];
 
@@ -544,7 +544,7 @@ function reportPdfDefinition(rows, filters, summary) {
         margin: [0, 16, 0, 0],
       },
       {
-        text: 'This is a computer generated document, no signature required',
+        text: 'This is a system generated invoice no authorized signature needed.',
         style: 'termsSub',
         alignment: 'center',
         margin: [0, 20, 0, 0],
@@ -558,7 +558,7 @@ function reportPdfDefinition(rows, filters, summary) {
       cell: { fontSize: 8.5, color: INK },
       summary: { fontSize: 9.5, bold: true, color: INK },
       payNow: { fontSize: 12, bold: true, color: PURPLE },
-      termsSub: { fontSize: 7.5, color: MUTED, italics: true },
+      termsSub: { fontSize: 10, color: MUTED, italics: true },
     },
     defaultStyle: { fontSize: 8.5 },
   };

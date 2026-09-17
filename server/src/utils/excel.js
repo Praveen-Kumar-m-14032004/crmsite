@@ -22,7 +22,7 @@ async function buildReportExcel(rows, summary) {
   sheet.addRow([]); // Blank spacer
 
   // Table Headers
-  const headers = ['Invoice No', 'Invoice Date', 'Company', 'Sub Amount', 'Status'];
+  const headers = ['Invoice No', 'Invoice Date', 'Company Name', 'Sub Amount', 'Status'];
   const headerRow = sheet.addRow(headers);
   headerRow.height = 25;
 
@@ -58,7 +58,7 @@ async function buildReportExcel(rows, summary) {
       String(r.invoice_date).slice(0, 10),
       r.companyname,
       Number(r.sub_amount) || 0,
-      r.status || '',
+      r.status === 'Pending' ? 'Unpaid' : (r.status || ''),
     ]);
     row.height = 20;
 

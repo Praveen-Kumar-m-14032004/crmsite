@@ -16,7 +16,13 @@ async function runQuery(filters, limit) {
 
   if (start || end) match.invoice_date = { ...(start ? { $gte: start } : {}), ...(end ? { $lte: end } : {}) };
   if (paymentStatus && paymentStatus !== 'All') match.payment_status = paymentStatus;
-  if (status && status !== 'All') match.status = status;
+  if (status && status !== 'All') {
+    if (status === 'Unpaid' || status === 'Pending') {
+      match.status = { $in: ['Pending', 'Unpaid'] };
+    } else {
+      match.status = status;
+    }
+  }
   if (invoiceNo && String(invoiceNo).trim() && invoiceNo !== 'All') match.invoice_no = String(invoiceNo).trim();
 
   const pipeline = [

@@ -148,10 +148,10 @@ function getSpacing(itemCount) {
   if (itemCount <= 5) {
     return {
       ...fixed,
-      headerBottomMargin: 24,
-      fromToBottomMargin: 20,
-      tablePaddingV: 6,
-      footerTopMargin: 36,
+      headerBottomMargin: 20,
+      fromToBottomMargin: 16,
+      tablePaddingV: 8,
+      footerTopMargin: 60,
       fromFontSize: 8.5,
       toFontSize: 8.5,
       partyNameSize: 10,
@@ -163,10 +163,10 @@ function getSpacing(itemCount) {
   if (itemCount <= 6) {
     return {
       ...fixed,
-      headerBottomMargin: 24,
-      fromToBottomMargin: 20,
-      tablePaddingV: 6,
-      footerTopMargin: 36,
+      headerBottomMargin: 20,
+      fromToBottomMargin: 16,
+      tablePaddingV: 8,
+      footerTopMargin: 60,
       fromFontSize: 8.5,
       toFontSize: 8.5,
       partyNameSize: 10,
@@ -178,10 +178,10 @@ function getSpacing(itemCount) {
   if (itemCount <= 8) {
     return {
       ...fixed,
-      headerBottomMargin: 18,
-      fromToBottomMargin: 16,
-      tablePaddingV: 5,
-      footerTopMargin: 28,
+      headerBottomMargin: 16,
+      fromToBottomMargin: 14,
+      tablePaddingV: 6,
+      footerTopMargin: 45,
       fromFontSize: 8,
       toFontSize: 8,
       partyNameSize: 9.5,
@@ -195,8 +195,8 @@ function getSpacing(itemCount) {
       ...fixed,
       headerBottomMargin: 12,
       fromToBottomMargin: 12,
-      tablePaddingV: 4,
-      footerTopMargin: 20,
+      tablePaddingV: 5,
+      footerTopMargin: 30,
       fromFontSize: 7.5,
       toFontSize: 7.5,
       partyNameSize: 9,
@@ -210,8 +210,8 @@ function getSpacing(itemCount) {
       ...fixed,
       headerBottomMargin: 8,
       fromToBottomMargin: 8,
-      tablePaddingV: 3,
-      footerTopMargin: 14,
+      tablePaddingV: 3.5,
+      footerTopMargin: 20,
       fromFontSize: 7,
       toFontSize: 7,
       partyNameSize: 8.5,
@@ -225,7 +225,7 @@ function getSpacing(itemCount) {
     headerBottomMargin: 4,
     fromToBottomMargin: 4,
     tablePaddingV: 2,
-    footerTopMargin: 8,
+    footerTopMargin: 10,
     fromFontSize: 6.5,
     toFontSize: 6.5,
     partyNameSize: 8,
@@ -319,14 +319,14 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
       {
         columns: [
           {
-            width: 275,
+            width: 250,
             stack: [
               { text: 'From:', style: 'partyLabel' },
               ...fromLines,
             ],
           },
           {
-            width: 240,
+            width: 265,
             stack: [
               { text: `To: ${invoice.companyname || ''}`, style: 'partyLabel' },
               {
@@ -340,6 +340,7 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
                 style: 'partyLine',
               },
             ],
+            margin: [40, 0, 0, 0],
           },
         ],
         margin: [0, 0, 0, sp.fromToBottomMargin],
@@ -450,7 +451,7 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
 
       totalLabel: { fontSize: 10, color: INK },
       totalValue: { fontSize: 10.5, bold: true, color: INK },
-      systemNotice: { fontSize: 13.5, bold: true, color: INK, italics: true },
+      systemNotice: { fontSize: 10, bold: true, color: INK, italics: true },
     },
   };
 }
@@ -554,7 +555,7 @@ function reportPdfDefinition(rows, filters, summary) {
       cell: { fontSize: 8.5, color: INK },
       summary: { fontSize: 9.5, bold: true, color: INK },
       payNow: { fontSize: 12, bold: true, color: PURPLE },
-      systemNotice: { fontSize: 13.5, bold: true, color: INK, italics: true },
+      systemNotice: { fontSize: 10, bold: true, color: INK, italics: true },
     },
     defaultStyle: { fontSize: 8.5 },
   };

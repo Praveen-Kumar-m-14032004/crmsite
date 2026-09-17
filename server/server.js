@@ -2,6 +2,7 @@ require('dotenv').config();
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 
 if (!process.env.JWT_SECRET) {
   process.env.JWT_SECRET = 'permit-declaration-secret-da41d4f289e9d0410ad09455e84f577c';
@@ -24,6 +25,7 @@ const settingsRoutes = require('./src/routes/settings');
 
 const app = express();
 
+app.use(compression());
 app.use(cors({
   origin: (origin, callback) => callback(null, true),
   credentials: true,

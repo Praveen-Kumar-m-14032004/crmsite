@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { invoicesApi, settingsApi } from '../../api/endpoints';
-import { openViaApi } from '../../api/download';
+import { openViaApi, prefetchPdf } from '../../api/download';
 import { useDataTable } from '../../hooks/useDataTable';
 import { usePermissions } from '../../hooks/usePermissions';
 import { errorMessage, useToast } from '../../hooks/ToastContext';
@@ -152,7 +152,10 @@ export default function ManageInvoice() {
         <div className="row-actions">
            {can('invoices.print') && (
             <button className="btn-icon icon-print" title="Print / download PDF"
-              disabled={printingId === row.id} onClick={() => handlePrint(row)}>
+              disabled={printingId === row.id}
+              onMouseEnter={() => prefetchPdf(`/invoices/${row.id}/print`)}
+              onFocus={() => prefetchPdf(`/invoices/${row.id}/print`)}
+              onClick={() => handlePrint(row)}>
               {printingId === row.id ? <SpinnerIcon width={15} height={15} /> : <PrinterIcon width={15} height={15} />}
             </button>
           )}

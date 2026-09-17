@@ -259,7 +259,7 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
     { text: String(idx + 1), style: 'cell', alignment: 'center' },
     { text: (item.productname || '').toUpperCase(), style: 'cell', alignment: 'left' },
     { text: item.description || '', style: 'cell', alignment: 'left' },
-    { text: money(item.rate), style: 'cell', alignment: 'right' },
+    { text: money(item.rate), style: 'cell', alignment: 'center' },
     { text: String(Number(item.quantity || 0)), style: 'cell', alignment: 'center' },
     { text: money(item.total), style: 'cell', alignment: 'right' },
   ]);

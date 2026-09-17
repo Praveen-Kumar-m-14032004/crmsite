@@ -89,9 +89,7 @@ async function list(req, res) {
   const pageNum = Math.max(parseInt(page, 10) || 1, 1);
   const limitNum = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 1000);
 
-  const pipeline = customerLookup();
   const matchConditions = [];
-
   if (isTrash) {
     matchConditions.push({ is_deleted: true });
   } else {
@@ -101,15 +99,21 @@ async function list(req, res) {
   if (customer_id && numericId(customer_id)) {
     matchConditions.push({ customer_id: numericId(customer_id) });
   }
+
+  const pipeline = [{ $match: { $and: matchConditions } }, ...customerLookup()];
+  const postMatch = [];
+
   if (company && String(company).trim() && company !== 'All') {
-    matchConditions.push({ 'customer.companyname': { $regex: escapeRegex(String(company).trim()), $options: 'i' } });
+    postMatch.push({ 'customer.companyname': { $regex: escapeRegex(String(company).trim()), $options: 'i' } });
   }
   if (String(search).trim()) {
     const regex = { $regex: escapeRegex(String(search).trim()), $options: 'i' };
-    matchConditions.push({ $or: [{ invoice_no: regex }, { 'customer.companyname': regex }, { customer_contact: regex }] });
+    postMatch.push({ $or: [{ invoice_no: regex }, { 'customer.companyname': regex }, { customer_contact: regex }] });
   }
 
-  pipeline.push({ $match: { $and: matchConditions } });
+  if (postMatch.length) {
+    pipeline.push({ $match: { $and: postMatch } });
+  }
 
   const [result] = await collection('invoices').aggregate([
     ...pipeline,
@@ -150,8 +154,8 @@ async function list(req, res) {
 
 async function getInvoiceWithItems(id) {
   const [invoice] = await collection('invoices').aggregate([
-    ...customerLookup(),
     { $match: { id } },
+    ...customerLookup(),
     { $project: { ...projection(), person_incharge: '$customer.person_incharge', customer_address: '$customer.address', customer_mobile: '$customer.mobile_no' } },
   ]).toArray();
   if (!invoice) return null;
@@ -398,10 +402,19 @@ async function permanentDelete(req, res) {
   res.json({ message: 'Invoice permanently deleted' });
 }
 
+let settingsCache = null;
+let settingsCacheTime = 0;
+async function getCompanySettings() {
+  if (settingsCache && Date.now() - settingsCacheTime < 60000) return settingsCache;
+  settingsCache = (await collection('company_settings').findOne({})) || {};
+  settingsCacheTime = Date.now();
+  return settingsCache;
+}
+
 async function print(req, res) {
   const invoice = await getInvoiceWithItems(numericId(req.params.id));
   if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
-  const settings = await collection('company_settings').findOne({}) || {};
+  const settings = await getCompanySettings();
   const pdfBuffer = await buildPdf(invoicePdfDefinition(invoice, invoice.items, settings));
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="invoice-${invoice.invoice_no}.pdf"`);

@@ -294,23 +294,22 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
       text: 'This is a system generated invoice no authorized signature needed.',
       style: 'systemNotice',
       alignment: 'center',
-      margin: [40, 0, 40, 15],
+      margin: [0, 15, 0, 0],
     }),
     content: [
       /* ======== HEADER: Logo left, Date + Invoice # aligned right (to Total SGD column) ======== */
       {
         columns: [
           {
-            width: '*',
+            width: 250,
             stack: [logoBlock()],
           },
           {
-            width: 'auto',
+            width: 265,
             stack: [
               { text: `Date: ${formatDate(invoice.invoice_date)}`, style: 'dateLine', alignment: 'right' },
               { text: formattedInvoiceNo, style: 'invoiceNo', alignment: 'right' },
             ],
-            alignment: 'right',
           },
         ],
         margin: [0, 0, 0, sp.headerBottomMargin],

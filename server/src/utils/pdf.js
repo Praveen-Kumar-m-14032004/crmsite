@@ -149,15 +149,15 @@ function payNowBadge() {
 function getSpacing(itemCount) {
   // Invoice# and Date sizes are fixed to match the reference PDF
   const fixed = {
-    dateLineSize: 11.5,
-    invoiceNoSize: 16.5,
+    dateLineSize: 11,
+    invoiceNoSize: 15.5,
   };
 
   if (itemCount <= 4) {
     // Exact match for 1–4 item invoices matching reference PDF
     return {
       ...fixed,
-      headerBottomMargin: 32,
+      headerBottomMargin: 24,
       fromToBottomMargin: 26,
       tablePaddingV: 6.5,
       footerTopMargin: 110,
@@ -285,18 +285,19 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
 
   return {
     content: [
-      /* ======== HEADER: Logo left, Date + Invoice # right (left-aligned block at right margin) ======== */
+      /* ======== HEADER: Logo left, Date + Invoice # aligned with To section column ======== */
       {
         columns: [
-          logoBlock(),
-          { width: '*', text: '' },
           {
-            width: 'auto',
+            width: 290,
+            stack: [logoBlock()],
+          },
+          {
+            width: 225,
             stack: [
               { text: `Date: ${formatDate(invoice.invoice_date)}`, style: 'dateLine' },
               { text: formattedInvoiceNo, style: 'invoiceNo' },
             ],
-            alignment: 'left',
           },
         ],
         margin: [0, 0, 0, sp.headerBottomMargin],

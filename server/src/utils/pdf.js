@@ -21,6 +21,12 @@ try {
 }
 
 const fonts = {
+  Lato: {
+    normal: path.join(FONT_DIR, 'Lato-Regular.ttf'),
+    bold: path.join(FONT_DIR, 'Lato-Bold.ttf'),
+    italics: path.join(FONT_DIR, 'Lato-Italic.ttf'),
+    bolditalics: path.join(FONT_DIR, 'Lato-BoldItalic.ttf'),
+  },
   Roboto: {
     normal: path.join(FONT_DIR, 'Roboto-Regular.ttf'),
     bold: path.join(FONT_DIR, 'Roboto-Medium.ttf'),
@@ -59,7 +65,7 @@ function buildPdf(docDefinition) {
         pageSize: 'A4',
         pageMargins: [40, 35, 40, 35],
         ...rest,
-        defaultStyle: { font: 'Roboto', fontSize: 9.5, color: INK, ...defaultStyle },
+        defaultStyle: { font: 'Lato', fontSize: 9.5, color: INK, ...defaultStyle },
       });
       const chunks = [];
       doc.on('data', (chunk) => chunks.push(chunk));
@@ -101,40 +107,27 @@ function logoBlock() {
         width: '*',
         stack: [
           { text: 'Permit', style: 'wordmark' },
-          { text: 'Declaration', style: 'wordmark', margin: [0, -3, 0, 0] },
+          { text: 'Declaration', style: 'wordmark' },
         ],
+        margin: [4, 0, 0, 0],
       },
     ],
-    columnGap: 4,
-    width: 152,
   };
 }
 
-/* ---- PayNow badge ---- */
+/* ---- PayNow Badge ---- */
 function payNowBadge() {
   if (paynowBase64) {
     return {
       image: paynowBase64,
-      width: 76,
-      margin: [0, 4, 0, 3],
+      width: 80,
+      margin: [0, 4, 0, 2],
     };
   }
-  // Fallback vector PayNow
   return {
-    columns: [
-      { width: 'auto', text: 'PAYN', style: 'payNow' },
-      {
-        width: 15,
-        canvas: [
-          { type: 'ellipse', x: 7, y: 6.5, r1: 6.2, r2: 6.2, lineWidth: 2, lineColor: PURPLE },
-          { type: 'ellipse', x: 7, y: 6.5, r1: 2.2, r2: 2.2, color: PURPLE },
-        ],
-        margin: [1, 2.5, 1, 0],
-      },
-      { width: 'auto', text: 'W', style: 'payNow' },
-    ],
-    columnGap: 0,
-    margin: [0, 4, 0, 3],
+    text: 'PayNow',
+    style: 'payNow',
+    margin: [0, 4, 0, 2],
   };
 }
 
@@ -147,25 +140,23 @@ function payNowBadge() {
  * Usable height ≈ 771.89pt (841.89 - 35 top - 35 bottom margins).
  */
 function getSpacing(itemCount) {
-  // Invoice# and Date sizes are fixed to match the reference PDF
   const fixed = {
-    dateLineSize: 11,
-    invoiceNoSize: 15.5,
+    dateLineSize: 9,
+    invoiceNoSize: 13,
   };
 
-  if (itemCount <= 4) {
-    // Exact match for 1–4 item invoices matching reference PDF
+  if (itemCount <= 5) {
     return {
       ...fixed,
       headerBottomMargin: 24,
-      fromToBottomMargin: 26,
-      tablePaddingV: 6.5,
-      footerTopMargin: 110,
-      fromFontSize: 9,
-      toFontSize: 9,
-      partyNameSize: 10.5,
-      cellFontSize: 9,
-      thFontSize: 9,
+      fromToBottomMargin: 20,
+      tablePaddingV: 5.5,
+      footerTopMargin: 50,
+      fromFontSize: 8.5,
+      toFontSize: 8.5,
+      partyNameSize: 10,
+      cellFontSize: 8.5,
+      thFontSize: 8.5,
       totalBoxMarginTop: 2,
     };
   }
@@ -229,7 +220,6 @@ function getSpacing(itemCount) {
       totalBoxMarginTop: 0,
     };
   }
-  // 14+ items – maximum single-page compression before natural overflow
   return {
     ...fixed,
     headerBottomMargin: 4,
@@ -262,8 +252,8 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
     { text: String(idx + 1), style: 'cell', alignment: 'left' },
     { text: (item.productname || '').toUpperCase(), style: 'cell' },
     { text: item.description || '', style: 'cell' },
-    { text: String(Number(item.rate || 0)), style: 'cell' },
-    { text: String(Number(item.quantity || 0)), style: 'cell' },
+    { text: String(Number(item.rate || 0)), style: 'cell', alignment: 'right' },
+    { text: String(Number(item.quantity || 0)), style: 'cell', alignment: 'right' },
     { text: money(item.total), style: 'cell', alignment: 'right' },
   ]);
 
@@ -279,7 +269,7 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
     settings.mobile ? `HP: ${settings.mobile}` : null,
   ].filter(Boolean).join(' | ');
   if (telLine) fromLines.push({ text: telLine, style: 'partyLine' });
-  if (settings.email) fromLines.push({ text: `Email:\n${settings.email}`, style: 'partyLine' });
+  if (settings.email) fromLines.push({ text: `Email: ${settings.email}`, style: 'partyLine' });
   if (settings.website) fromLines.push({ text: settings.website, style: 'partyLine' });
   if (settings.contact_no) fromLines.push({ text: `Contact: ${settings.contact_no}`, style: 'partyLine' });
 
@@ -289,10 +279,10 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
         return [
           {
             image: logoBase64,
-            width: 300,
+            width: 320,
             opacity: 0.08,
             absolutePosition: {
-              x: (pageSize.width - 300) / 2,
+              x: (pageSize.width - 320) / 2,
               y: (pageSize.height - 180) / 2,
             },
           },
@@ -300,51 +290,43 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
       }
       return null;
     },
-    footer: (currentPage, pageCount) => ({
-      text: 'This is a system generated invoice no authorized signature needed.',
-      style: 'footerNotice',
-      alignment: 'center',
-      margin: [40, 10, 40, 0],
-    }),
     content: [
-      /* ======== HEADER: Logo left, Date + Invoice # right ======== */
+      /* ======== HEADER: Logo left, Date + Invoice # aligned with To column ======== */
       {
         columns: [
           {
-            width: 260,
+            width: 280,
             stack: [logoBlock()],
           },
           {
-            width: '*',
+            width: 235,
             stack: [
               { text: `Date: ${formatDate(invoice.invoice_date)}`, style: 'dateLine' },
               { text: formattedInvoiceNo, style: 'invoiceNo' },
             ],
-            alignment: 'right',
           },
         ],
         margin: [0, 0, 0, sp.headerBottomMargin],
       },
 
-      /* ======== FROM & TO SECTION: From aligned with logo, To moved to right ======== */
+      /* ======== FROM & TO SECTION ======== */
       {
         columns: [
           {
-            width: 240,
+            width: 280,
             stack: [
               { text: 'From:', style: 'partyLabel' },
               ...fromLines,
             ],
           },
-          { width: 30, text: '' },
           {
-            width: 245,
+            width: 235,
             stack: [
               { text: `To: ${invoice.companyname || ''}`, style: 'partyLabel' },
               {
                 text: `Name: ${invoice.person_incharge || ''}`,
                 style: 'partyName',
-                margin: [0, 5, 0, 2],
+                margin: [0, 4, 0, 2],
               },
               { text: `Address: ${invoice.customer_address || ''}`, style: 'partyLine' },
               {
@@ -357,39 +339,36 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
         margin: [0, 0, 0, sp.fromToBottomMargin],
       },
 
-      /* ======== LINE-ITEMS TABLE ======== */
-      /*
-       * Column widths match reference layout perfectly:
-       *   # (20) | product name (*) | Description (70) | Unit Cost SGD (70) | Qty (32) | Total SGD (54)
-       */
+      /* ======== LINE-ITEMS TABLE (Solid Purple Header with White Text) ======== */
       {
         table: {
           headerRows: 1,
           widths: [20, '*', 70, 70, 32, 54],
           body: [
             [
-              { text: '#', style: 'th' },
-              { text: 'product name', style: 'th' },
-              { text: 'Description', style: 'th' },
-              { text: `Unit Cost ${currency}`, style: 'th' },
-              { text: 'Qty', style: 'th' },
-              { text: `Total ${currency}`, style: 'th', alignment: 'right' },
+              { text: '#', style: 'th', color: '#ffffff', bold: true },
+              { text: 'product name', style: 'th', color: '#ffffff', bold: true },
+              { text: 'Description', style: 'th', color: '#ffffff', bold: true },
+              { text: `Unit Cost ${currency}`, style: 'th', color: '#ffffff', bold: true, alignment: 'right' },
+              { text: 'Qty', style: 'th', color: '#ffffff', bold: true, alignment: 'right' },
+              { text: `Total ${currency}`, style: 'th', color: '#ffffff', bold: true, alignment: 'right' },
             ],
             ...itemRows,
           ],
         },
         layout: {
+          fillColor: (rowIndex) => (rowIndex === 0 ? PURPLE : null),
           hLineWidth: (i, node) => {
-            if (i === 0 || i === 1) return 0.75;
+            if (i === 0 || i === 1) return 0;
             if (i === node.table.body.length) return 0.75;
-            return 0.5;
+            return 0.4;
           },
           vLineWidth: () => 0,
-          hLineColor: () => PURPLE,
-          paddingTop: () => sp.tablePaddingV,
-          paddingBottom: () => sp.tablePaddingV,
-          paddingLeft: () => 0,
-          paddingRight: (i) => (i === 5 ? 0 : 4),
+          hLineColor: (i, node) => (i === node.table.body.length ? PURPLE : '#e2e5eb'),
+          paddingTop: (i) => (i === 0 ? 6 : sp.tablePaddingV),
+          paddingBottom: (i) => (i === 0 ? 6 : sp.tablePaddingV),
+          paddingLeft: (i) => (i === 0 ? 6 : 4),
+          paddingRight: (i) => (i === 5 ? 6 : 4),
         },
       },
 
@@ -437,6 +416,15 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
         ],
         margin: [0, sp.footerTopMargin, 0, 0],
       },
+
+      /* ======== TERMS / COMPUTER GENERATED NOTICE ======== */
+      {
+        stack: [
+          { text: 'Payment is due and payable under the terms and conditions of contract', style: 'termsLead', alignment: 'center' },
+          { text: 'This is a computer generated document, no signature required', style: 'termsSub', alignment: 'center' },
+        ],
+        margin: [0, 24, 0, 0],
+      },
     ],
 
     /* ======== STYLES (exact match to reference PDF) ======== */
@@ -455,7 +443,7 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
       },
       partyLine: { fontSize: sp.fromFontSize, color: INK, lineHeight: 1.35 },
 
-      th: { fontSize: sp.thFontSize, color: MUTED, bold: false },
+      th: { fontSize: sp.thFontSize, color: '#ffffff', bold: true },
       cell: { fontSize: sp.cellFontSize, color: INK, lineHeight: 1.25 },
 
       payLead: { fontSize: 8.5, color: INK },
@@ -465,7 +453,8 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
 
       totalLabel: { fontSize: 10, color: INK },
       totalValue: { fontSize: 10.5, bold: true, color: INK },
-      footerNotice: { fontSize: 7.5, color: MUTED, italics: true },
+      termsLead: { fontSize: 8.5, color: INK, margin: [0, 0, 0, 2] },
+      termsSub: { fontSize: 7.5, color: MUTED, italics: true },
     },
   };
 }
@@ -483,11 +472,11 @@ function reportPdfDefinition(rows, filters, summary) {
 
   const body = [
     [
-      { text: 'Invoice No', style: 'th', alignment: 'left' },
-      { text: 'Invoice Date', style: 'th', alignment: 'left' },
-      { text: 'Company', style: 'th', alignment: 'left' },
-      { text: 'Sub Amount', style: 'th', alignment: 'right' },
-      { text: 'Status', style: 'th', alignment: 'center' },
+      { text: 'Invoice No', style: 'th', alignment: 'left', color: '#ffffff', bold: true },
+      { text: 'Invoice Date', style: 'th', alignment: 'left', color: '#ffffff', bold: true },
+      { text: 'Company', style: 'th', alignment: 'left', color: '#ffffff', bold: true },
+      { text: 'Sub Amount', style: 'th', alignment: 'right', color: '#ffffff', bold: true },
+      { text: 'Status', style: 'th', alignment: 'center', color: '#ffffff', bold: true },
     ],
     ...rows.map((r) => [
       { text: r.invoice_no, style: 'cell', alignment: 'left' },
@@ -516,12 +505,6 @@ function reportPdfDefinition(rows, filters, summary) {
       }
       return null;
     },
-    footer: (currentPage, pageCount) => ({
-      text: 'This is a system generated invoice no authorized signature needed.',
-      style: 'footerNotice',
-      alignment: 'center',
-      margin: [40, 10, 40, 0],
-    }),
     content: [
       {
         columns: [
@@ -543,13 +526,14 @@ function reportPdfDefinition(rows, filters, summary) {
       {
         table: { headerRows: 1, widths: [130, 110, '*', 110, 90], body },
         layout: {
-          hLineWidth: (i, node) => (i === 0 || i === 1 || i === node.table.body.length ? 0.8 : 0.4),
+          fillColor: (i) => (i === 0 ? PURPLE : null),
+          hLineWidth: (i, node) => (i === 0 || i === 1 || i === node.table.body.length ? 0.75 : 0.4),
           vLineWidth: () => 0,
-          hLineColor: () => PURPLE,
-          paddingTop: () => 8,
-          paddingBottom: () => 8,
-          paddingLeft: (i) => (i === 0 ? 0 : 8),
-          paddingRight: (i, node) => (i === node.table.widths.length - 1 ? 0 : 8),
+          hLineColor: (i, node) => (i === 0 || i === node.table.body.length ? PURPLE : '#e2e5eb'),
+          paddingTop: (i) => (i === 0 ? 6 : 7),
+          paddingBottom: (i) => (i === 0 ? 6 : 7),
+          paddingLeft: (i) => (i === 0 ? 6 : 8),
+          paddingRight: (i, node) => (i === node.table.widths.length - 1 ? 6 : 8),
         },
       },
       {
@@ -559,16 +543,22 @@ function reportPdfDefinition(rows, filters, summary) {
         ],
         margin: [0, 16, 0, 0],
       },
+      {
+        text: 'This is a computer generated document, no signature required',
+        style: 'termsSub',
+        alignment: 'center',
+        margin: [0, 20, 0, 0],
+      },
     ],
     styles: {
       wordmark: { fontSize: 13, bold: true, color: PURPLE, lineHeight: 1 },
       title: { fontSize: 16, bold: true, color: INK },
       subtle: { fontSize: 8.5, color: MUTED },
-      th: { fontSize: 8.5, color: MUTED },
+      th: { fontSize: 8.5, color: '#ffffff', bold: true },
       cell: { fontSize: 8.5, color: INK },
       summary: { fontSize: 9.5, bold: true, color: INK },
       payNow: { fontSize: 12, bold: true, color: PURPLE },
-      footerNotice: { fontSize: 7.5, color: MUTED, italics: true },
+      termsSub: { fontSize: 7.5, color: MUTED, italics: true },
     },
     defaultStyle: { fontSize: 8.5 },
   };

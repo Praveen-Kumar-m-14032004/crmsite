@@ -184,27 +184,23 @@ export default function Reports() {
               <span>Total Amount</span>
               <strong className="num">{currency} {results.summary.totalAmount.toFixed(2)}</strong>
             </div>
-            <div className="summary-tile warn">
-              <span>Total Due</span>
-              <strong className="num">{currency} {results.summary.totalDue.toFixed(2)}</strong>
-            </div>
           </div>
 
           <div className="table-scroll">
             <table className="datatable">
               <thead>
                 <tr>
-                  <th>Invoice No</th><th>Invoice Date</th><th>Company</th><th>Contact</th>
+                  <th>Invoice No</th>
+                  <th>Invoice Date</th>
+                  <th>Company</th>
                   <th style={{ textAlign: 'right' }}>Sub Amount</th>
-                  <th style={{ textAlign: 'right' }}>Paid</th>
-                  <th style={{ textAlign: 'right' }}>Due</th>
-                  <th>Payment Status</th><th>Status</th>
+                  <th style={{ textAlign: 'center' }}>Status</th>
                 </tr>
               </thead>
               <tbody>
                 {results.data.length === 0 ? (
                   <tr>
-                    <td colSpan={9} style={{ borderBottom: 'none' }}>
+                    <td colSpan={5} style={{ borderBottom: 'none' }}>
                       <div className="empty-state">
                         <span className="empty-icon"><InvoiceIcon width={26} height={26} /></span>
                         <h4>No matching invoices</h4>
@@ -217,14 +213,8 @@ export default function Reports() {
                     <td><span className="cell-strong">#{r.invoice_no}</span></td>
                     <td className="num">{formatDateDMY(r.invoice_date)}</td>
                     <td>{r.companyname}</td>
-                    <td className="num">{r.customer_contact || '—'}</td>
                     <td className="num" style={{ textAlign: 'right' }}>{Number(r.sub_amount).toFixed(2)}</td>
-                    <td className="num" style={{ textAlign: 'right' }}>{Number(r.paid_amount).toFixed(2)}</td>
-                    <td className="num" style={{ textAlign: 'right', color: Number(r.due_amount) > 0 ? 'var(--red)' : undefined, fontWeight: Number(r.due_amount) > 0 ? 600 : 400 }}>
-                      {Number(r.due_amount).toFixed(2)}
-                    </td>
-                    <td><span className={`badge ${paymentBadge(r.payment_status)}`}>{r.payment_status || '—'}</span></td>
-                    <td><span className="badge badge-neutral">{r.status}</span></td>
+                    <td style={{ textAlign: 'center' }}><span className="badge badge-neutral">{r.status}</span></td>
                   </tr>
                 ))}
               </tbody>

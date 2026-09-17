@@ -127,12 +127,13 @@ async function list(req, res) {
 
   const nowMs = Date.now();
   const data = (result.data || []).map((row) => {
+    const status = (row.status && String(row.status).toLowerCase() === 'pending') ? 'Unpaid' : (row.status || 'Unpaid');
     if (row.deleted_at) {
       const elapsedMs = nowMs - new Date(row.deleted_at).getTime();
       const remainingDays = Math.max(0, Math.ceil((TEN_DAYS_MS - elapsedMs) / (1000 * 60 * 60 * 24)));
-      return { ...row, days_left: remainingDays };
+      return { ...row, status, days_left: remainingDays };
     }
-    return row;
+    return { ...row, status };
   });
 
   res.json({
@@ -160,7 +161,8 @@ async function getInvoiceWithItems(id) {
     { $unwind: '$product' },
     { $project: { id: 1, invoice_id: 1, product_id: 1, description: 1, rate: 1, quantity: 1, total: 1, productname: '$product.productname' } },
   ]).toArray();
-  return { ...invoice, items };
+  const normStatus = (invoice.status && String(invoice.status).toLowerCase() === 'pending') ? 'Unpaid' : (invoice.status || 'Unpaid');
+  return { ...invoice, status: normStatus, items };
 }
 
 async function getOne(req, res) {
@@ -275,7 +277,7 @@ async function create(req, res) {
       due_amount: dueAmount,
       payment_type: payment_type || null,
       payment_status: payment_status || null,
-      status: status || 'Pending',
+      status: (status && String(status).toLowerCase() === 'pending') ? 'Unpaid' : (status || 'Unpaid'),
       is_gst_bill: gstBill ? 1 : 0,
       is_deleted: false,
       deleted_at: null,
@@ -336,7 +338,7 @@ async function update(req, res) {
           due_amount: dueAmount,
           payment_type: payment_type || null,
           payment_status: payment_status || null,
-          status: status || existing.status,
+          status: (status && String(status).toLowerCase() === 'pending') ? 'Unpaid' : (status || (existing.status && String(existing.status).toLowerCase() === 'pending' ? 'Unpaid' : (existing.status || 'Unpaid'))),
           is_gst_bill: gstBill ? 1 : 0,
           updated_at: now(),
         },
@@ -355,7 +357,8 @@ async function update(req, res) {
 
 async function patchStatus(req, res) {
   if (!req.body.status) return res.status(400).json({ message: 'status is required' });
-  const result = await collection('invoices').updateOne({ id: numericId(req.params.id) }, { $set: { status: req.body.status, updated_at: now() } });
+  const newStatus = (req.body.status && String(req.body.status).toLowerCase() === 'pending') ? 'Unpaid' : req.body.status;
+  const result = await collection('invoices').updateOne({ id: numericId(req.params.id) }, { $set: { status: newStatus, updated_at: now() } });
   if (!result.matchedCount) return res.status(404).json({ message: 'Invoice not found' });
   invalidateTotal();
   res.json({ message: 'Status updated' });

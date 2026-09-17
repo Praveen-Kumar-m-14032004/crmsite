@@ -58,7 +58,7 @@ async function buildReportExcel(rows, summary) {
       String(r.invoice_date).slice(0, 10),
       r.companyname,
       Number(r.sub_amount) || 0,
-      r.status === 'Pending' ? 'Unpaid' : (r.status || ''),
+      (!r.status || String(r.status).toLowerCase() === 'pending') ? 'Unpaid' : r.status,
     ]);
     row.height = 20;
 

@@ -29,7 +29,7 @@ export default function AddInvoice() {
   const [customerContact, setCustomerContact] = useState('');
   const [items, setItems] = useState(defaultItems());
   const [paidAmount, setPaidAmount] = useState('');
-  const [invoiceStatus, setInvoiceStatus] = useState('Pending');
+  const [invoiceStatus, setInvoiceStatus] = useState('Unpaid');
   // Version of the record this form was loaded from, sent back on save so the
   // server can reject an edit that would clobber someone else's newer changes.
   const [loadedVersion, setLoadedVersion] = useState(null);
@@ -55,7 +55,7 @@ export default function AddInvoice() {
           setCustomerId(String(inv.customer_id));
           setCustomerContact(inv.customer_contact || '');
           setPaidAmount(String(inv.paid_amount ?? ''));
-          setInvoiceStatus(inv.status || 'Pending');
+          setInvoiceStatus(inv.status && String(inv.status).toLowerCase() === 'pending' ? 'Unpaid' : (inv.status || 'Unpaid'));
           setLoadedVersion(inv.version ?? null);
           setItems(inv.items.length ? inv.items.map((it) => ({
             product_id: String(it.product_id),
@@ -204,7 +204,7 @@ export default function AddInvoice() {
         paid_amount: paid,
         payment_type: null,
         payment_status: autoPaymentStatus,
-        status: isEdit ? invoiceStatus : 'Pending',
+        status: isEdit ? invoiceStatus : 'Unpaid',
         ...(isEdit && loadedVersion !== null ? { expected_version: loadedVersion } : {}),
       };
 

@@ -50,11 +50,15 @@ async function runQuery(filters, limit) {
   ]).toArray();
 
   const totals = result.totals[0] || { count: 0, totalAmount: 0, totalDue: 0 };
+  const mappedRows = (result.rows || []).map((r) => ({
+    ...r,
+    status: (r.status && String(r.status).toLowerCase() === 'pending') ? 'Unpaid' : (r.status || 'Unpaid'),
+  }));
   return {
-    rows: result.rows,
+    rows: mappedRows,
     summary: { totalAmount: Number(totals.totalAmount || 0), totalDue: Number(totals.totalDue || 0) },
     count: Number(totals.count || 0),
-    truncated: Number(totals.count || 0) > result.rows.length,
+    truncated: Number(totals.count || 0) > mappedRows.length,
   };
 }
 

@@ -421,7 +421,7 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
       {
         stack: [
           { text: 'Payment is due and payable under the terms and conditions of contract', style: 'termsLead', alignment: 'center' },
-          { text: 'This is a system generated invoice no authorized signature needed.', style: 'termsSub', alignment: 'center' },
+          { text: 'This is a system generated invoice no authorized signature needed.', style: 'systemNotice', alignment: 'center' },
         ],
         margin: [0, 24, 0, 0],
       },
@@ -453,8 +453,8 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
 
       totalLabel: { fontSize: 10, color: INK },
       totalValue: { fontSize: 10.5, bold: true, color: INK },
-      termsLead: { fontSize: 10, color: INK, margin: [0, 0, 0, 3], bold: true },
-      termsSub: { fontSize: 10, color: MUTED, italics: true },
+      termsLead: { fontSize: 10.5, color: INK, margin: [0, 0, 0, 4], bold: true },
+      systemNotice: { fontSize: 13, bold: true, color: INK, italics: true },
     },
   };
 }
@@ -462,11 +462,11 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
 /* ---- Report PDF (preserved for report generation) ---- */
 function reportPdfDefinition(rows, filters, summary) {
   const activeFilters = Object.entries({
-    Company: filters.company,
+    'Company Name': filters.company,
     From: filters.start,
     To: filters.end,
     'Payment Status': filters.paymentStatus,
-    Status: filters.status,
+    Status: filters.status && String(filters.status).toLowerCase() === 'pending' ? 'Unpaid' : filters.status,
     'Invoice No': filters.invoiceNo,
   }).filter(([, v]) => v && v !== 'All').map(([k, v]) => `${k}: ${v}`).join('   •   ');
 
@@ -483,7 +483,7 @@ function reportPdfDefinition(rows, filters, summary) {
       { text: formatDate(r.invoice_date), style: 'cell', alignment: 'left' },
       { text: r.companyname, style: 'cell', alignment: 'left' },
       { text: money(r.sub_amount), style: 'cell', alignment: 'right' },
-      { text: r.status === 'Pending' ? 'Unpaid' : (r.status || ''), style: 'cell', alignment: 'center' },
+      { text: (r.status && String(r.status).toLowerCase() === 'pending') ? 'Unpaid' : (r.status || ''), style: 'cell', alignment: 'center' },
     ]),
   ];
 
@@ -545,9 +545,9 @@ function reportPdfDefinition(rows, filters, summary) {
       },
       {
         text: 'This is a system generated invoice no authorized signature needed.',
-        style: 'termsSub',
+        style: 'systemNotice',
         alignment: 'center',
-        margin: [0, 20, 0, 0],
+        margin: [0, 24, 0, 0],
       },
     ],
     styles: {
@@ -558,7 +558,7 @@ function reportPdfDefinition(rows, filters, summary) {
       cell: { fontSize: 8.5, color: INK },
       summary: { fontSize: 9.5, bold: true, color: INK },
       payNow: { fontSize: 12, bold: true, color: PURPLE },
-      termsSub: { fontSize: 10, color: MUTED, italics: true },
+      systemNotice: { fontSize: 13, bold: true, color: INK, italics: true },
     },
     defaultStyle: { fontSize: 8.5 },
   };

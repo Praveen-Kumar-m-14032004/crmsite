@@ -214,7 +214,7 @@ export default function Reports() {
                     <td className="num">{formatDateDMY(r.invoice_date)}</td>
                     <td>{r.companyname}</td>
                     <td className="num" style={{ textAlign: 'right' }}>{Number(r.sub_amount).toFixed(2)}</td>
-                    <td style={{ textAlign: 'center' }}><span className="badge badge-neutral">{r.status === 'Pending' ? 'Unpaid' : r.status}</span></td>
+                    <td style={{ textAlign: 'center' }}><span className="badge badge-neutral">{(!r.status || String(r.status).toLowerCase() === 'pending') ? 'Unpaid' : r.status}</span></td>
                   </tr>
                 ))}
               </tbody>

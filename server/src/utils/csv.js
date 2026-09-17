@@ -27,7 +27,7 @@ function buildReportCsv(rows) {
       csvEscape(String(r.invoice_date).slice(0, 10)),
       csvEscape(r.companyname),
       csvEscape(Number(r.sub_amount).toFixed(2)),
-      csvEscape(r.status === 'Pending' ? 'Unpaid' : (r.status || '')),
+      csvEscape((!r.status || String(r.status).toLowerCase() === 'pending') ? 'Unpaid' : r.status),
     ].join(','));
   });
 

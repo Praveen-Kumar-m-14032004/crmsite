@@ -18,10 +18,11 @@ import {
   TrashIcon,
 } from '../../components/common/Icons';
 
-const STATUS_OPTIONS = ['Pending', 'Paid', 'Cancelled'];
+const STATUS_OPTIONS = ['Unpaid', 'Paid', 'Cancelled'];
 
 const statusClass = (status) => ({
   Paid: 'is-paid',
+  Unpaid: 'is-pending',
   Pending: 'is-pending',
   Cancelled: 'is-cancelled',
 }[status] || '');

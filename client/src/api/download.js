@@ -16,7 +16,59 @@ export async function downloadViaApi(path, params, filename) {
 }
 
 export async function openViaApi(path) {
-  const newTab = typeof window !== 'undefined' ? window.open('about:blank', '_blank') : null;
+  let newTab = null;
+  if (typeof window !== 'undefined') {
+    try {
+      newTab = window.open('', '_blank');
+      if (newTab && newTab.document) {
+        newTab.document.write(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="utf-8" />
+              <title>Preparing Invoice...</title>
+              <style>
+                body {
+                  margin: 0;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  height: 100vh;
+                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                  background-color: #f8fafc;
+                  color: #343a40;
+                }
+                .box {
+                  text-align: center;
+                  padding: 24px;
+                }
+                .spinner {
+                  width: 32px;
+                  height: 32px;
+                  border: 3px solid #e9d5ff;
+                  border-top-color: #6d2475;
+                  border-radius: 50%;
+                  animation: spin 0.6s linear infinite;
+                  margin: 0 auto 12px;
+                }
+                @keyframes spin { to { transform: rotate(360deg); } }
+                .text { font-size: 14px; font-weight: 600; color: #6d2475; }
+              </style>
+            </head>
+            <body>
+              <div class="box">
+                <div class="spinner"></div>
+                <div class="text">Opening Invoice PDF...</div>
+              </div>
+            </body>
+          </html>
+        `);
+      }
+    } catch (_e) {
+      newTab = null;
+    }
+  }
+
   try {
     const res = await api.get(path, { responseType: 'blob' });
     const blob = new Blob([res.data], { type: 'application/pdf' });

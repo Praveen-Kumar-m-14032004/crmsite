@@ -333,6 +333,7 @@ async function create(req, res) {
     });
     await collection('invoice_items').insertMany(await itemDocuments(id, items));
     invalidateTotal();
+    prewarmInvoicePdf(id);
     res.status(201).json({ id });
   } catch (error) {
     if (isDuplicateError(error)) return res.status(409).json({ message: 'Invoice number already exists' });
@@ -394,6 +395,8 @@ async function update(req, res) {
     await collection('invoice_items').deleteMany({ invoice_id: id });
     await collection('invoice_items').insertMany(await itemDocuments(id, items));
     invalidateTotal();
+    invalidateInvoicePdfCache(id);
+    prewarmInvoicePdf(id);
     res.json({ id });
   } catch (error) {
     if (isDuplicateError(error)) return res.status(409).json({ message: 'Invoice number already exists' });
@@ -403,10 +406,13 @@ async function update(req, res) {
 
 async function patchStatus(req, res) {
   if (!req.body.status) return res.status(400).json({ message: 'status is required' });
+  const id = numericId(req.params.id);
   const newStatus = (req.body.status && String(req.body.status).toLowerCase() === 'pending') ? 'Unpaid' : req.body.status;
-  const result = await collection('invoices').updateOne({ id: numericId(req.params.id) }, { $set: { status: newStatus, updated_at: now() } });
+  const result = await collection('invoices').updateOne({ id }, { $set: { status: newStatus, updated_at: now() } });
   if (!result.matchedCount) return res.status(404).json({ message: 'Invoice not found' });
   invalidateTotal();
+  invalidateInvoicePdfCache(id);
+  prewarmInvoicePdf(id);
   res.json({ message: 'Status updated' });
 }
 
@@ -419,6 +425,7 @@ async function remove(req, res) {
   );
   if (!result.matchedCount) return res.status(404).json({ message: 'Invoice not found' });
   invalidateTotal();
+  invalidateInvoicePdfCache(id);
   res.json({ message: 'Invoice moved to trash' });
 }
 
@@ -431,6 +438,8 @@ async function restore(req, res) {
   );
   if (!result.matchedCount) return res.status(404).json({ message: 'Invoice not found' });
   invalidateTotal();
+  invalidateInvoicePdfCache(id);
+  prewarmInvoicePdf(id);
   res.json({ message: 'Invoice restored successfully' });
 }
 
@@ -441,16 +450,54 @@ async function permanentDelete(req, res) {
   if (!result.deletedCount) return res.status(404).json({ message: 'Invoice not found' });
   await collection('invoice_items').deleteMany({ invoice_id: id });
   invalidateTotal();
+  invalidateInvoicePdfCache(id);
   res.json({ message: 'Invoice permanently deleted' });
 }
 
 let settingsCache = null;
 let settingsCacheTime = 0;
 async function getCompanySettings() {
-  if (settingsCache && Date.now() - settingsCacheTime < 60000) return settingsCache;
+  if (settingsCache && Date.now() - settingsCacheTime < 300000) return settingsCache;
   settingsCache = (await collection('company_settings').findOne({})) || {};
   settingsCacheTime = Date.now();
   return settingsCache;
+}
+
+const invoicePdfCache = new Map();
+const MAX_PDF_CACHE = 500;
+
+function getInvoicePdfCacheKey(invoice) {
+  return `${invoice.id}:${invoice.updated_at || invoice.created_at || ''}:${invoice.status || ''}:${invoice.sub_amount || ''}`;
+}
+
+function invalidateInvoicePdfCache(id) {
+  if (!id) return;
+  for (const key of invoicePdfCache.keys()) {
+    if (key.startsWith(`${id}:`)) {
+      invoicePdfCache.delete(key);
+    }
+  }
+}
+
+async function prewarmInvoicePdf(id) {
+  try {
+    const [invoice, settings] = await Promise.all([
+      getInvoiceWithItems(id),
+      getCompanySettings(),
+    ]);
+    if (!invoice) return;
+    const key = getInvoicePdfCacheKey(invoice);
+    if (!invoicePdfCache.has(key)) {
+      const buffer = await buildPdf(invoicePdfDefinition(invoice, invoice.items || [], settings));
+      if (invoicePdfCache.size >= MAX_PDF_CACHE) {
+        const firstKey = invoicePdfCache.keys().next().value;
+        invoicePdfCache.delete(firstKey);
+      }
+      invoicePdfCache.set(key, buffer);
+    }
+  } catch (_e) {
+    // Non-blocking prewarm
+  }
 }
 
 async function print(req, res) {
@@ -463,9 +510,22 @@ async function print(req, res) {
   ]);
 
   if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
-  const pdfBuffer = await buildPdf(invoicePdfDefinition(invoice, invoice.items || [], settings));
+
+  const cacheKey = getInvoicePdfCacheKey(invoice);
+  let pdfBuffer = invoicePdfCache.get(cacheKey);
+
+  if (!pdfBuffer) {
+    pdfBuffer = await buildPdf(invoicePdfDefinition(invoice, invoice.items || [], settings));
+    if (invoicePdfCache.size >= MAX_PDF_CACHE) {
+      const firstKey = invoicePdfCache.keys().next().value;
+      invoicePdfCache.delete(firstKey);
+    }
+    invoicePdfCache.set(cacheKey, pdfBuffer);
+  }
+
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="invoice-${invoice.invoice_no}.pdf"`);
+  res.setHeader('Cache-Control', 'private, max-age=300');
   res.send(pdfBuffer);
 }
 

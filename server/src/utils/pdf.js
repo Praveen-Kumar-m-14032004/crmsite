@@ -63,7 +63,7 @@ function buildPdf(docDefinition) {
     try {
       const doc = printer.createPdfKitDocument({
         pageSize: 'A4',
-        pageMargins: [40, 35, 40, 35],
+        pageMargins: [40, 35, 40, 45],
         ...rest,
         defaultStyle: { font: 'Lato', fontSize: 9.5, color: INK, ...defaultStyle },
       });
@@ -120,12 +120,12 @@ function payNowBadge() {
   if (paynowBase64) {
     return {
       image: paynowBase64,
-      width: 80,
-      margin: [0, 4, 0, 2],
+      width: 110,
+      margin: [0, 6, 0, 2],
     };
   }
   return {
-    text: 'PayNow',
+    text: 'PAYNOW',
     style: 'payNow',
     margin: [0, 4, 0, 2],
   };
@@ -137,7 +137,7 @@ function payNowBadge() {
  * while maintaining pixel-perfect proportions to the reference PDF.
  *
  * A4 dimensions: 595.28pt × 841.89pt
- * Usable height ≈ 771.89pt (841.89 - 35 top - 35 bottom margins).
+ * Usable height ≈ 771.89pt (841.89 - 35 top - 45 bottom margins).
  */
 function getSpacing(itemCount) {
   const fixed = {
@@ -150,8 +150,8 @@ function getSpacing(itemCount) {
       ...fixed,
       headerBottomMargin: 24,
       fromToBottomMargin: 20,
-      tablePaddingV: 5.5,
-      footerTopMargin: 50,
+      tablePaddingV: 6,
+      footerTopMargin: 36,
       fromFontSize: 8.5,
       toFontSize: 8.5,
       partyNameSize: 10,
@@ -165,8 +165,8 @@ function getSpacing(itemCount) {
       ...fixed,
       headerBottomMargin: 24,
       fromToBottomMargin: 20,
-      tablePaddingV: 5.5,
-      footerTopMargin: 65,
+      tablePaddingV: 6,
+      footerTopMargin: 36,
       fromFontSize: 8.5,
       toFontSize: 8.5,
       partyNameSize: 10,
@@ -180,8 +180,8 @@ function getSpacing(itemCount) {
       ...fixed,
       headerBottomMargin: 18,
       fromToBottomMargin: 16,
-      tablePaddingV: 4.5,
-      footerTopMargin: 40,
+      tablePaddingV: 5,
+      footerTopMargin: 28,
       fromFontSize: 8,
       toFontSize: 8,
       partyNameSize: 9.5,
@@ -195,8 +195,8 @@ function getSpacing(itemCount) {
       ...fixed,
       headerBottomMargin: 12,
       fromToBottomMargin: 12,
-      tablePaddingV: 3.5,
-      footerTopMargin: 24,
+      tablePaddingV: 4,
+      footerTopMargin: 20,
       fromFontSize: 7.5,
       toFontSize: 7.5,
       partyNameSize: 9,
@@ -210,8 +210,8 @@ function getSpacing(itemCount) {
       ...fixed,
       headerBottomMargin: 8,
       fromToBottomMargin: 8,
-      tablePaddingV: 2.5,
-      footerTopMargin: 16,
+      tablePaddingV: 3,
+      footerTopMargin: 14,
       fromFontSize: 7,
       toFontSize: 7,
       partyNameSize: 8.5,
@@ -249,11 +249,11 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
 
   /* ---- Build item rows ---- */
   const itemRows = items.map((item, idx) => [
-    { text: String(idx + 1), style: 'cell', alignment: 'left' },
-    { text: (item.productname || '').toUpperCase(), style: 'cell' },
-    { text: item.description || '', style: 'cell' },
-    { text: String(Number(item.rate || 0)), style: 'cell', alignment: 'right' },
-    { text: String(Number(item.quantity || 0)), style: 'cell', alignment: 'right' },
+    { text: String(idx + 1), style: 'cell', alignment: 'center' },
+    { text: (item.productname || '').toUpperCase(), style: 'cell', alignment: 'left' },
+    { text: item.description || '', style: 'cell', alignment: 'left' },
+    { text: money(item.rate), style: 'cell', alignment: 'right' },
+    { text: String(Number(item.quantity || 0)), style: 'cell', alignment: 'center' },
     { text: money(item.total), style: 'cell', alignment: 'right' },
   ]);
 
@@ -290,20 +290,27 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
       }
       return null;
     },
+    footer: (currentPage, pageCount) => ({
+      text: 'This is a system generated invoice no authorized signature needed.',
+      style: 'systemNotice',
+      alignment: 'center',
+      margin: [40, 0, 40, 15],
+    }),
     content: [
-      /* ======== HEADER: Logo left, Date + Invoice # aligned with To column ======== */
+      /* ======== HEADER: Logo left, Date + Invoice # aligned right (to Total SGD column) ======== */
       {
         columns: [
           {
-            width: 280,
+            width: '*',
             stack: [logoBlock()],
           },
           {
-            width: 235,
+            width: 'auto',
             stack: [
-              { text: `Date: ${formatDate(invoice.invoice_date)}`, style: 'dateLine' },
-              { text: formattedInvoiceNo, style: 'invoiceNo' },
+              { text: `Date: ${formatDate(invoice.invoice_date)}`, style: 'dateLine', alignment: 'right' },
+              { text: formattedInvoiceNo, style: 'invoiceNo', alignment: 'right' },
             ],
+            alignment: 'right',
           },
         ],
         margin: [0, 0, 0, sp.headerBottomMargin],
@@ -313,14 +320,14 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
       {
         columns: [
           {
-            width: 280,
+            width: 275,
             stack: [
               { text: 'From:', style: 'partyLabel' },
               ...fromLines,
             ],
           },
           {
-            width: 235,
+            width: 240,
             stack: [
               { text: `To: ${invoice.companyname || ''}`, style: 'partyLabel' },
               {
@@ -343,14 +350,14 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
       {
         table: {
           headerRows: 1,
-          widths: [20, '*', 70, 70, 32, 54],
+          widths: [24, 145, '*', 70, 40, 80],
           body: [
             [
-              { text: '#', style: 'th', color: '#ffffff', bold: true },
-              { text: 'product name', style: 'th', color: '#ffffff', bold: true },
-              { text: 'Description', style: 'th', color: '#ffffff', bold: true },
+              { text: '#', style: 'th', color: '#ffffff', bold: true, alignment: 'center' },
+              { text: 'product name', style: 'th', color: '#ffffff', bold: true, alignment: 'left' },
+              { text: 'Description', style: 'th', color: '#ffffff', bold: true, alignment: 'left' },
               { text: `Unit Cost ${currency}`, style: 'th', color: '#ffffff', bold: true, alignment: 'right' },
-              { text: 'Qty', style: 'th', color: '#ffffff', bold: true, alignment: 'right' },
+              { text: 'Qty', style: 'th', color: '#ffffff', bold: true, alignment: 'center' },
               { text: `Total ${currency}`, style: 'th', color: '#ffffff', bold: true, alignment: 'right' },
             ],
             ...itemRows,
@@ -365,10 +372,10 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
           },
           vLineWidth: () => 0,
           hLineColor: (i, node) => (i === node.table.body.length ? PURPLE : '#e2e5eb'),
-          paddingTop: (i) => (i === 0 ? 6 : sp.tablePaddingV),
-          paddingBottom: (i) => (i === 0 ? 6 : sp.tablePaddingV),
-          paddingLeft: (i) => (i === 0 ? 6 : 4),
-          paddingRight: (i) => (i === 5 ? 6 : 4),
+          paddingTop: (i) => (i === 0 ? 7 : sp.tablePaddingV),
+          paddingBottom: (i) => (i === 0 ? 7 : sp.tablePaddingV),
+          paddingLeft: (i) => (i === 0 ? 4 : 6),
+          paddingRight: (i) => (i === 5 ? 6 : 6),
         },
       },
 
@@ -376,7 +383,7 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
       {
         columns: [
           {
-            width: 310,
+            width: 295,
             stack: [
               { text: 'All Cheques should be crossed and made payable to', style: 'payLead' },
               {
@@ -388,7 +395,7 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
             ],
           },
           {
-            width: 205,
+            width: 220,
             stack: [
               {
                 table: {
@@ -404,26 +411,17 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
                   hLineWidth: () => 0.75,
                   vLineWidth: () => 0,
                   hLineColor: () => PURPLE,
-                  paddingTop: () => 6,
-                  paddingBottom: () => 6,
-                  paddingLeft: () => 0,
-                  paddingRight: () => 0,
+                  paddingTop: () => 8,
+                  paddingBottom: () => 8,
+                  paddingLeft: () => 8,
+                  paddingRight: () => 6,
                 },
               },
             ],
-            margin: [0, sp.totalBoxMarginTop, 0, 0],
+            margin: [0, 4, 0, 0],
           },
         ],
         margin: [0, sp.footerTopMargin, 0, 0],
-      },
-
-      /* ======== TERMS / COMPUTER GENERATED NOTICE ======== */
-      {
-        stack: [
-          { text: 'Payment is due and payable under the terms and conditions of contract', style: 'termsLead', alignment: 'center' },
-          { text: 'This is a system generated invoice no authorized signature needed.', style: 'systemNotice', alignment: 'center' },
-        ],
-        margin: [0, 24, 0, 0],
       },
     ],
 
@@ -453,8 +451,7 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
 
       totalLabel: { fontSize: 10, color: INK },
       totalValue: { fontSize: 10.5, bold: true, color: INK },
-      termsLead: { fontSize: 10.5, color: INK, margin: [0, 0, 0, 4], bold: true },
-      systemNotice: { fontSize: 13, bold: true, color: INK, italics: true },
+      systemNotice: { fontSize: 13.5, bold: true, color: INK, italics: true },
     },
   };
 }
@@ -558,7 +555,7 @@ function reportPdfDefinition(rows, filters, summary) {
       cell: { fontSize: 8.5, color: INK },
       summary: { fontSize: 9.5, bold: true, color: INK },
       payNow: { fontSize: 12, bold: true, color: PURPLE },
-      systemNotice: { fontSize: 13, bold: true, color: INK, italics: true },
+      systemNotice: { fontSize: 13.5, bold: true, color: INK, italics: true },
     },
     defaultStyle: { fontSize: 8.5 },
   };

@@ -458,18 +458,14 @@ function reportPdfDefinition(rows, filters, summary) {
   }).filter(([, v]) => v && v !== 'All').map(([k, v]) => `${k}: ${v}`).join('   •   ');
 
   const body = [
-    ['Invoice No', 'Date', 'Company', 'Contact', 'Sub Amount', 'Paid', 'Due', 'Payment Status', 'Status'].map((h, i) => ({
-      text: h, style: 'th', alignment: i >= 4 && i <= 6 ? 'right' : 'left',
+    ['Invoice No', 'Invoice Date', 'Company', 'Sub Amount', 'Status'].map((h, i) => ({
+      text: h, style: 'th', alignment: i === 3 ? 'right' : 'left',
     })),
     ...rows.map((r) => [
       { text: r.invoice_no, style: 'cell' },
       { text: formatDate(r.invoice_date), style: 'cell' },
       { text: r.companyname, style: 'cell' },
-      { text: r.customer_contact || '', style: 'cell' },
       { text: money(r.sub_amount), style: 'cell', alignment: 'right' },
-      { text: money(r.paid_amount), style: 'cell', alignment: 'right' },
-      { text: money(r.due_amount), style: 'cell', alignment: 'right' },
-      { text: r.payment_status || '', style: 'cell' },
       { text: r.status || '', style: 'cell' },
     ]),
   ];
@@ -495,7 +491,7 @@ function reportPdfDefinition(rows, filters, summary) {
         ? { text: activeFilters, style: 'subtle', margin: [0, 0, 0, 12] }
         : { text: 'All invoices (no filters applied)', style: 'subtle', margin: [0, 0, 0, 12] },
       {
-        table: { headerRows: 1, widths: [50, 58, '*', 74, 60, 55, 55, 72, 52], body },
+        table: { headerRows: 1, widths: [100, 100, '*', 120, 90], body },
         layout: {
           hLineWidth: () => 0.8,
           vLineWidth: () => 0,
@@ -510,7 +506,6 @@ function reportPdfDefinition(rows, filters, summary) {
         columns: [
           { text: `${rows.length} invoice${rows.length === 1 ? '' : 's'}`, style: 'summary' },
           { text: `Total Amount: ${money(summary.totalAmount)}`, style: 'summary', alignment: 'right' },
-          { text: `Total Due: ${money(summary.totalDue)}`, style: 'summary', alignment: 'right' },
         ],
         margin: [0, 16, 0, 0],
       },

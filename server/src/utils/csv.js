@@ -16,8 +16,7 @@ function csvEscape(value) {
 
 function buildReportCsv(rows) {
   const headers = [
-    'Invoice No', 'Invoice Date', 'Company', 'Contact',
-    'Sub Amount', 'Paid', 'Due', 'Payment Status', 'Status',
+    'Invoice No', 'Invoice Date', 'Company', 'Sub Amount', 'Status',
   ];
 
   const lines = [headers.join(',')];
@@ -27,11 +26,7 @@ function buildReportCsv(rows) {
       csvEscape(r.invoice_no),
       csvEscape(String(r.invoice_date).slice(0, 10)),
       csvEscape(r.companyname),
-      csvEscape(r.customer_contact),
       csvEscape(Number(r.sub_amount).toFixed(2)),
-      csvEscape(Number(r.paid_amount).toFixed(2)),
-      csvEscape(Number(r.due_amount).toFixed(2)),
-      csvEscape(r.payment_status),
       csvEscape(r.status),
     ].join(','));
   });

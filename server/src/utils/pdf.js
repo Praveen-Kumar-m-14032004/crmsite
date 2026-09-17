@@ -145,13 +145,13 @@ function getSpacing(itemCount) {
     invoiceNoSize: 13,
   };
 
-  if (itemCount <= 5) {
+  if (itemCount <= 3) {
     return {
       ...fixed,
       headerBottomMargin: 20,
       fromToBottomMargin: 16,
       tablePaddingV: 8,
-      footerTopMargin: 60,
+      footerTopMargin: 210,
       fromFontSize: 8.5,
       toFontSize: 8.5,
       partyNameSize: 10,
@@ -160,13 +160,13 @@ function getSpacing(itemCount) {
       totalBoxMarginTop: 2,
     };
   }
-  if (itemCount <= 6) {
+  if (itemCount <= 5) {
     return {
       ...fixed,
       headerBottomMargin: 20,
       fromToBottomMargin: 16,
       tablePaddingV: 8,
-      footerTopMargin: 60,
+      footerTopMargin: 170,
       fromFontSize: 8.5,
       toFontSize: 8.5,
       partyNameSize: 10,
@@ -181,7 +181,7 @@ function getSpacing(itemCount) {
       headerBottomMargin: 16,
       fromToBottomMargin: 14,
       tablePaddingV: 6,
-      footerTopMargin: 45,
+      footerTopMargin: 100,
       fromFontSize: 8,
       toFontSize: 8,
       partyNameSize: 9.5,
@@ -196,7 +196,7 @@ function getSpacing(itemCount) {
       headerBottomMargin: 12,
       fromToBottomMargin: 12,
       tablePaddingV: 5,
-      footerTopMargin: 30,
+      footerTopMargin: 50,
       fromFontSize: 7.5,
       toFontSize: 7.5,
       partyNameSize: 9,
@@ -283,7 +283,7 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
             opacity: 0.08,
             absolutePosition: {
               x: (pageSize.width - 320) / 2,
-              y: (pageSize.height - 180) / 2,
+              y: 290,
             },
           },
         ];
@@ -297,36 +297,36 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
       margin: [0, 15, 0, 0],
     }),
     content: [
-      /* ======== HEADER: Logo left, Date + Invoice # aligned right (to Total SGD column) ======== */
+      /* ======== HEADER: Logo left, Date + Invoice # aligned with To column ======== */
       {
         columns: [
           {
-            width: 250,
+            width: 275,
             stack: [logoBlock()],
           },
           {
-            width: 265,
+            width: 240,
             stack: [
-              { text: `Date: ${formatDate(invoice.invoice_date)}`, style: 'dateLine', alignment: 'right' },
-              { text: formattedInvoiceNo, style: 'invoiceNo', alignment: 'right' },
+              { text: `Date: ${formatDate(invoice.invoice_date)}`, style: 'dateLine' },
+              { text: formattedInvoiceNo, style: 'invoiceNo' },
             ],
           },
         ],
         margin: [0, 0, 0, sp.headerBottomMargin],
       },
 
-      /* ======== FROM & TO SECTION ======== */
+      /* ======== FROM & TO SECTION (exact same left-alignment for To as Date/Invoice) ======== */
       {
         columns: [
           {
-            width: 250,
+            width: 275,
             stack: [
               { text: 'From:', style: 'partyLabel' },
               ...fromLines,
             ],
           },
           {
-            width: 265,
+            width: 240,
             stack: [
               { text: `To: ${invoice.companyname || ''}`, style: 'partyLabel' },
               {
@@ -340,7 +340,6 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
                 style: 'partyLine',
               },
             ],
-            margin: [40, 0, 0, 0],
           },
         ],
         margin: [0, 0, 0, sp.fromToBottomMargin],

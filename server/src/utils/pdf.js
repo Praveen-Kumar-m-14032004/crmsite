@@ -301,11 +301,11 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
       {
         columns: [
           {
-            width: 275,
+            width: 315,
             stack: [logoBlock()],
           },
           {
-            width: 240,
+            width: 200,
             stack: [
               { text: `Date: ${formatDate(invoice.invoice_date)}`, style: 'dateLine' },
               { text: formattedInvoiceNo, style: 'invoiceNo' },
@@ -319,14 +319,14 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
       {
         columns: [
           {
-            width: 275,
+            width: 315,
             stack: [
               { text: 'From:', style: 'partyLabel' },
               ...fromLines,
             ],
           },
           {
-            width: 240,
+            width: 200,
             stack: [
               { text: `To: ${invoice.companyname || ''}`, style: 'partyLabel' },
               {

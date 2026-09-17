@@ -304,15 +304,15 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
       margin: [0, 15, 0, 0],
     }),
     content: [
-      /* ======== HEADER: Logo left, Date + Invoice # aligned with To column ======== */
+      /* ======== HEADER: Logo left, Date + Invoice # right ======== */
       {
         columns: [
           {
-            width: 375,
+            width: 360,
             stack: [logoBlock()],
           },
           {
-            width: 140,
+            width: 155,
             stack: [
               { text: `Date: ${formatDate(invoice.invoice_date)}`, style: 'dateLine' },
               { text: formattedInvoiceNo, style: 'invoiceNo' },
@@ -322,18 +322,18 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
         margin: [0, 0, 0, sp.headerBottomMargin],
       },
 
-      /* ======== FROM & TO SECTION (exact same left-alignment for To as Date/Invoice) ======== */
+      /* ======== FROM & TO SECTION (To section moved left) ======== */
       {
         columns: [
           {
-            width: 375,
+            width: 295,
             stack: [
               { text: 'From:', style: 'partyLabel' },
               ...fromLines,
             ],
           },
           {
-            width: 140,
+            width: 220,
             stack: [
               { text: `To: ${invoice.companyname || ''}`, style: 'partyLabel' },
               {
@@ -372,12 +372,11 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
         layout: {
           fillColor: (rowIndex) => (rowIndex === 0 ? PURPLE : null),
           hLineWidth: (i, node) => {
-            if (i === 0 || i === 1) return 0;
-            if (i === node.table.body.length) return 0.75;
-            return 0.4;
+            if (i === 0) return 0;
+            return 0.75;
           },
           vLineWidth: () => 0,
-          hLineColor: (i, node) => (i === node.table.body.length ? PURPLE : '#e2e5eb'),
+          hLineColor: () => PURPLE,
           paddingTop: (i) => (i === 0 ? 7 : sp.tablePaddingV),
           paddingBottom: (i) => (i === 0 ? 7 : sp.tablePaddingV),
           paddingLeft: (i) => (i === 0 ? 4 : 6),

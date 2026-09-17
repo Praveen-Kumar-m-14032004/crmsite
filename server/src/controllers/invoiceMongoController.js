@@ -155,18 +155,60 @@ async function list(req, res) {
 async function getInvoiceWithItems(id) {
   const [invoice] = await collection('invoices').aggregate([
     { $match: { id } },
-    ...customerLookup(),
-    { $project: { ...projection(), person_incharge: '$customer.person_incharge', customer_address: '$customer.address', customer_mobile: '$customer.mobile_no' } },
+    {
+      $lookup: {
+        from: 'customers',
+        localField: 'customer_id',
+        foreignField: 'id',
+        as: 'customer',
+      },
+    },
+    { $unwind: { path: '$customer', preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: 'invoice_items',
+        let: { invId: '$id' },
+        pipeline: [
+          { $match: { $expr: { $eq: ['$invoice_id', '$$invId'] } } },
+          {
+            $lookup: {
+              from: 'products',
+              localField: 'product_id',
+              foreignField: 'id',
+              as: 'product',
+            },
+          },
+          { $unwind: { path: '$product', preserveNullAndEmptyArrays: true } },
+          {
+            $project: {
+              id: 1,
+              invoice_id: 1,
+              product_id: 1,
+              description: 1,
+              rate: 1,
+              quantity: 1,
+              total: 1,
+              productname: '$product.productname',
+            },
+          },
+        ],
+        as: 'items',
+      },
+    },
+    {
+      $project: {
+        ...projection(),
+        person_incharge: '$customer.person_incharge',
+        customer_address: '$customer.address',
+        customer_mobile: '$customer.mobile_no',
+        items: 1,
+      },
+    },
   ]).toArray();
+
   if (!invoice) return null;
-  const items = await collection('invoice_items').aggregate([
-    { $match: { invoice_id: id } },
-    { $lookup: { from: 'products', localField: 'product_id', foreignField: 'id', as: 'product' } },
-    { $unwind: '$product' },
-    { $project: { id: 1, invoice_id: 1, product_id: 1, description: 1, rate: 1, quantity: 1, total: 1, productname: '$product.productname' } },
-  ]).toArray();
   const normStatus = (invoice.status && String(invoice.status).toLowerCase() === 'pending') ? 'Unpaid' : (invoice.status || 'Unpaid');
-  return { ...invoice, status: normStatus, items };
+  return { ...invoice, status: normStatus };
 }
 
 async function getOne(req, res) {
@@ -412,10 +454,16 @@ async function getCompanySettings() {
 }
 
 async function print(req, res) {
-  const invoice = await getInvoiceWithItems(numericId(req.params.id));
+  const id = numericId(req.params.id);
+  if (!id) return res.status(400).json({ message: 'Invalid invoice ID' });
+
+  const [invoice, settings] = await Promise.all([
+    getInvoiceWithItems(id),
+    getCompanySettings(),
+  ]);
+
   if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
-  const settings = await getCompanySettings();
-  const pdfBuffer = await buildPdf(invoicePdfDefinition(invoice, invoice.items, settings));
+  const pdfBuffer = await buildPdf(invoicePdfDefinition(invoice, invoice.items || [], settings));
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="invoice-${invoice.invoice_no}.pdf"`);
   res.send(pdfBuffer);

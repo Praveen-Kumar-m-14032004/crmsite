@@ -16,8 +16,20 @@ export async function downloadViaApi(path, params, filename) {
 }
 
 export async function openViaApi(path) {
-  const res = await api.get(path, { responseType: 'blob' });
-  const blob = new Blob([res.data], { type: 'application/pdf' });
-  const url = window.URL.createObjectURL(blob);
-  window.open(url, '_blank');
+  const newTab = typeof window !== 'undefined' ? window.open('about:blank', '_blank') : null;
+  try {
+    const res = await api.get(path, { responseType: 'blob' });
+    const blob = new Blob([res.data], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+    if (newTab && !newTab.closed) {
+      newTab.location.href = url;
+    } else {
+      window.open(url, '_blank');
+    }
+  } catch (err) {
+    if (newTab && !newTab.closed) {
+      newTab.close();
+    }
+    throw err;
+  }
 }

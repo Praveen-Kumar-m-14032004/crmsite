@@ -28,6 +28,12 @@ async function buildReportExcel(rows, summary) {
   const totalRow = sheet.addRow({ invoice_no: 'Totals', sub_amount: summary.totalAmount });
   totalRow.font = { bold: true };
 
+  sheet.getColumn('invoice_no').alignment = { horizontal: 'left' };
+  sheet.getColumn('invoice_date').alignment = { horizontal: 'left' };
+  sheet.getColumn('companyname').alignment = { horizontal: 'left' };
+  sheet.getColumn('sub_amount').alignment = { horizontal: 'right' };
+  sheet.getColumn('status').alignment = { horizontal: 'center' };
+
   return workbook.xlsx.writeBuffer();
 }
 

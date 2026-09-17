@@ -458,15 +458,19 @@ function reportPdfDefinition(rows, filters, summary) {
   }).filter(([, v]) => v && v !== 'All').map(([k, v]) => `${k}: ${v}`).join('   •   ');
 
   const body = [
-    ['Invoice No', 'Invoice Date', 'Company', 'Sub Amount', 'Status'].map((h, i) => ({
-      text: h, style: 'th', alignment: i === 3 ? 'right' : 'left',
-    })),
+    [
+      { text: 'Invoice No', style: 'th', alignment: 'left' },
+      { text: 'Invoice Date', style: 'th', alignment: 'left' },
+      { text: 'Company', style: 'th', alignment: 'left' },
+      { text: 'Sub Amount', style: 'th', alignment: 'right' },
+      { text: 'Status', style: 'th', alignment: 'center' },
+    ],
     ...rows.map((r) => [
-      { text: r.invoice_no, style: 'cell' },
-      { text: formatDate(r.invoice_date), style: 'cell' },
-      { text: r.companyname, style: 'cell' },
+      { text: r.invoice_no, style: 'cell', alignment: 'left' },
+      { text: formatDate(r.invoice_date), style: 'cell', alignment: 'left' },
+      { text: r.companyname, style: 'cell', alignment: 'left' },
       { text: money(r.sub_amount), style: 'cell', alignment: 'right' },
-      { text: r.status || '', style: 'cell' },
+      { text: r.status || '', style: 'cell', alignment: 'center' },
     ]),
   ];
 
@@ -491,15 +495,15 @@ function reportPdfDefinition(rows, filters, summary) {
         ? { text: activeFilters, style: 'subtle', margin: [0, 0, 0, 12] }
         : { text: 'All invoices (no filters applied)', style: 'subtle', margin: [0, 0, 0, 12] },
       {
-        table: { headerRows: 1, widths: [100, 100, '*', 120, 90], body },
+        table: { headerRows: 1, widths: [130, 110, '*', 110, 90], body },
         layout: {
-          hLineWidth: () => 0.8,
+          hLineWidth: (i, node) => (i === 0 || i === 1 || i === node.table.body.length ? 0.8 : 0.4),
           vLineWidth: () => 0,
           hLineColor: () => PURPLE,
-          paddingTop: () => 7,
-          paddingBottom: () => 7,
-          paddingLeft: () => 0,
-          paddingRight: () => 8,
+          paddingTop: () => 8,
+          paddingBottom: () => 8,
+          paddingLeft: (i) => (i === 0 ? 0 : 8),
+          paddingRight: (i, node) => (i === node.table.widths.length - 1 ? 0 : 8),
         },
       },
       {

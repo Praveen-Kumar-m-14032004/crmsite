@@ -36,7 +36,11 @@ async function totalInvoices() {
 }
 
 async function nextNumber(_req, res) {
-  const invoices = await collection('invoices').find({}, { projection: { invoice_no: 1 } }).toArray();
+  const invoices = await collection('invoices')
+    .find({}, { projection: { invoice_no: 1 } })
+    .sort({ id: -1 })
+    .limit(100)
+    .toArray();
   let maxSeq = 100; // first invoice will be 101
   for (const inv of invoices) {
     const parts = String(inv.invoice_no).split('-');

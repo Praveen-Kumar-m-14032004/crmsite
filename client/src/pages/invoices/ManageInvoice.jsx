@@ -18,15 +18,6 @@ import {
   TrashIcon,
 } from '../../components/common/Icons';
 
-const STATUS_OPTIONS = ['Unpaid', 'Paid', 'Cancelled'];
-
-const statusClass = (status) => ({
-  Paid: 'is-paid',
-  Unpaid: 'is-pending',
-  Pending: 'is-pending',
-  Cancelled: 'is-cancelled',
-}[status] || '');
-
 /* Module-level settings cache — avoid re-fetching on every mount */
 let _settingsCache = null;
 let _settingsFetchedAt = 0;
@@ -129,15 +120,7 @@ export default function ManageInvoice() {
     }
   };
 
-  const handleStatusChange = async (row, status) => {
-    try {
-      await invoicesApi.patchStatus(row.id, status);
-      toast.success(`Invoice #${row.invoice_no} marked ${status}`);
-      table.reload();
-    } catch (err) {
-      toast.error(errorMessage(err, 'Could not update the status'));
-    }
-  };
+
 
   const handlePrint = useCallback(async (row) => {
     setPrintingId(row.id);
@@ -168,24 +151,6 @@ export default function ManageInvoice() {
       render: (r) => <span className="num cell-strong">{Number(r.sub_amount).toFixed(2)}</span>,
     },
     {
-      key: 'status', label: 'Status', sortable: true,
-      render: (r) => (
-        can('invoices.edit') ? (
-          <select
-            className={`status-select ${statusClass(r.status)}`}
-            value={r.status || 'Unpaid'}
-            onChange={(e) => handleStatusChange(r, e.target.value)}
-          >
-            {STATUS_OPTIONS.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-        ) : (
-          <span className={`status-pill ${statusClass(r.status)}`}>{r.status || 'Unpaid'}</span>
-        )
-      ),
-    },
-    {
       key: 'action', label: 'Action',
       render: (row) => (
         <div className="row-actions">
@@ -211,7 +176,7 @@ export default function ManageInvoice() {
         </div>
       ),
     },
-  ], [printingId, currency, can, navigate, handlePrint, handleStatusChange]);
+  ], [printingId, currency, can, navigate, handlePrint]);
 
   // Memoized trash columns — only recalculates when restoringId or currency changes
   const trashColumns = useMemo(() => [

@@ -270,17 +270,6 @@ export default function AddInvoice() {
               <label htmlFor="invdate">Invoice Date <span className="req">*</span></label>
               <input id="invdate" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} required />
             </div>
-            {/* 5. Status (only shown during edit) */}
-            {isEdit && (
-              <div className="form-field">
-                <label htmlFor="invstatus">Invoice Status</label>
-                <select id="invstatus" value={invoiceStatus} onChange={(e) => setInvoiceStatus(e.target.value)}>
-                  <option value="Unpaid">Unpaid</option>
-                  <option value="Paid">Paid</option>
-                  <option value="Cancelled">Cancelled</option>
-                </select>
-              </div>
-            )}
           </div>
         </div>
 

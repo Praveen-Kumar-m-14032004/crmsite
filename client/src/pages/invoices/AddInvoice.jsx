@@ -300,12 +300,12 @@ export default function AddInvoice() {
             <table className="line-items-table">
               <thead>
                 <tr>
-                  <th style={{ width: '24%' }}>Product</th>
-                  <th>Description</th>
-                  <th style={{ width: '13%' }}>Rate</th>
-                  <th style={{ width: '11%' }}>Quantity</th>
-                  <th style={{ width: '14%' }}>Total ({currency})</th>
-                  <th style={{ width: 52 }} aria-label="Actions" />
+                  <th style={{ width: '26%', minWidth: 180 }}>Product</th>
+                  <th style={{ minWidth: 140 }}>Description</th>
+                  <th style={{ width: '12%', minWidth: 85 }}>Rate</th>
+                  <th style={{ width: '10%', minWidth: 70 }}>Quantity</th>
+                  <th style={{ width: '13%', minWidth: 95 }}>Total ({currency})</th>
+                  <th style={{ width: 48 }} aria-label="Actions" />
                 </tr>
               </thead>
               <tbody>

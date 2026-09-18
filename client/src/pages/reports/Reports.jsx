@@ -19,6 +19,20 @@ const paymentBadge = (status) => ({
   Due: 'badge-danger',
 }[status] || 'badge-neutral');
 
+const paymentStatusOptions = [
+  { value: 'All', label: 'All' },
+  { value: 'Full Payment', label: 'Full Payment', sub: 'Zero balance remaining' },
+  { value: 'Partial Payment', label: 'Partial Payment', sub: 'Partially settled balance' },
+  { value: 'Due', label: 'Due', sub: 'Full balance outstanding' },
+];
+
+const invoiceStatusOptions = [
+  { value: 'All', label: 'All' },
+  { value: 'Paid', label: 'Paid', sub: 'Settled invoices' },
+  { value: 'Unpaid', label: 'Unpaid', sub: 'Unsettled or pending invoices' },
+  { value: 'Cancelled', label: 'Cancelled', sub: 'Voided invoices' },
+];
+
 export default function Reports() {
   const can = usePermissions();
   const toast = useToast();
@@ -126,15 +140,25 @@ export default function Reports() {
             </div>
             <div className="form-field">
               <label htmlFor="pstatus">Payment Status</label>
-              <select id="pstatus" value={filters.paymentStatus} onChange={set('paymentStatus')}>
-                <option>All</option><option>Full Payment</option><option>Partial Payment</option><option>Due</option>
-              </select>
+              <SearchableSelect
+                id="pstatus"
+                options={paymentStatusOptions}
+                value={filters.paymentStatus}
+                onChange={(val) => setFilters((f) => ({ ...f, paymentStatus: val || 'All' }))}
+                placeholder="All payment statuses"
+                allowCustom={false}
+              />
             </div>
             <div className="form-field">
               <label htmlFor="istatus">Invoice Status</label>
-              <select id="istatus" value={filters.status} onChange={set('status')}>
-                <option>All</option><option>Paid</option><option>Unpaid</option><option>Cancelled</option>
-              </select>
+              <SearchableSelect
+                id="istatus"
+                options={invoiceStatusOptions}
+                value={filters.status}
+                onChange={(val) => setFilters((f) => ({ ...f, status: val || 'All' }))}
+                placeholder="All invoice statuses"
+                allowCustom={false}
+              />
             </div>
             <div className="form-field">
               <label htmlFor="invno">Invoice No.</label>

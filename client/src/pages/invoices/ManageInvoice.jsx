@@ -81,7 +81,7 @@ export default function ManageInvoice() {
         _settingsCache = cur;
         _settingsFetchedAt = Date.now();
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const handleTabSwitch = (tab) => {
@@ -154,7 +154,7 @@ export default function ManageInvoice() {
       key: 'action', label: 'Action',
       render: (row) => (
         <div className="row-actions">
-           {can('invoices.print') && (
+          {can('invoices.print') && (
             <button className="btn-icon icon-print" title="Print / download PDF"
               disabled={printingId === row.id}
               onMouseEnter={() => prefetchPdf(`/invoices/${row.id}/print`)}

@@ -26,6 +26,19 @@ async function nextId(name, session) {
   return doc.value;
 }
 
+async function nextIds(name, count = 1, session) {
+  if (count <= 0) return [];
+  const result = await getDb().collection('counters').findOneAndUpdate(
+    { _id: name },
+    { $inc: { value: count } },
+    { upsert: true, returnDocument: 'after', session },
+  );
+  const doc = result?.value !== undefined && typeof result.value === 'object' ? result.value : result;
+  const endId = doc.value;
+  const startId = endId - count + 1;
+  return Array.from({ length: count }, (_, i) => startId + i);
+}
+
 function isDuplicateError(error) {
   return error?.code === 11000;
 }
@@ -34,4 +47,4 @@ function now() {
   return new Date().toISOString();
 }
 
-module.exports = { collection, numericId, nextId, isDuplicateError, now };
+module.exports = { collection, numericId, nextId, nextIds, isDuplicateError, now };

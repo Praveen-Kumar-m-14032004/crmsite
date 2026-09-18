@@ -69,14 +69,6 @@ export default function ManageInvoice() {
 
   const table = useDataTable(fetcher, { defaultSort: 'invoice_date', defaultDir: 'desc' });
 
-  // Batch-prefetch PDFs for all visible rows once data loads
-  useEffect(() => {
-    if (!isTrashRoute && table.data.length > 0 && can('invoices.print')) {
-      batchPrefetchPdfs(table.data);
-    }
-    return () => cancelBatchPrefetch();
-  }, [table.data, isTrashRoute]);
-
   useEffect(() => {
     const tab = location.pathname.includes('/trash') ? 'trash' : 'active';
     setActiveTab(tab);

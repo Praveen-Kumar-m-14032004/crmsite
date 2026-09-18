@@ -30,10 +30,16 @@ async function create(req, res) {
 
 async function update(req, res) {
   const { productname } = req.body;
-  if (!productname) return res.status(400).json({ message: 'Product name is required' });
-  const result = await collection('products').findOneAndUpdate({ id: numericId(req.params.id) }, { $set: { productname } }, { returnDocument: 'after' });
-  const product = result?.value || result;
-  if (!product || product.id === undefined) return res.status(404).json({ message: 'Product not found' });
+  if (!productname || !String(productname).trim()) return res.status(400).json({ message: 'Product name is required' });
+  const id = numericId(req.params.id);
+  if (!id) return res.status(400).json({ message: 'Invalid product ID' });
+  const result = await collection('products').findOneAndUpdate(
+    { id },
+    { $set: { productname: String(productname).trim(), updated_at: now() } },
+    { returnDocument: 'after' }
+  );
+  const product = result?.value !== undefined && typeof result.value === 'object' ? result.value : result;
+  if (!product) return res.status(404).json({ message: 'Product not found' });
   res.json(product);
 }
 

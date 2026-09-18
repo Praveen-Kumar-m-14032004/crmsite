@@ -37,12 +37,26 @@ async function create(req, res) {
 
 async function update(req, res) {
   const { companyname, person_incharge, mobile_no, email, address } = req.body;
-  if (!companyname) return res.status(400).json({ message: 'Company name is required' });
+  if (!companyname || !String(companyname).trim()) return res.status(400).json({ message: 'Company name is required' });
 
   const id = numericId(req.params.id);
-  const result = await collection('customers').findOneAndUpdate({ id }, { $set: { companyname, person_incharge: person_incharge || null, mobile_no: mobile_no || null, email: email || null, address: address || null, updated_at: now() } }, { returnDocument: 'after' });
-  const customer = result?.value || result;
-  if (!customer || customer.id === undefined) return res.status(404).json({ message: 'Customer not found' });
+  if (!id) return res.status(400).json({ message: 'Invalid customer ID' });
+  const result = await collection('customers').findOneAndUpdate(
+    { id },
+    {
+      $set: {
+        companyname: String(companyname).trim(),
+        person_incharge: person_incharge ? String(person_incharge).trim() : null,
+        mobile_no: mobile_no ? String(mobile_no).trim() : null,
+        email: email ? String(email).trim() : null,
+        address: address ? String(address).trim() : null,
+        updated_at: now(),
+      },
+    },
+    { returnDocument: 'after' }
+  );
+  const customer = result?.value !== undefined && typeof result.value === 'object' ? result.value : result;
+  if (!customer) return res.status(404).json({ message: 'Customer not found' });
   res.json(customer);
 }
 

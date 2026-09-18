@@ -141,8 +141,9 @@ export default function AddInvoice() {
 
     setSaving(true);
     try {
-      // 1. Resolve or dynamically create customer if needed
+      // 1. Resolve customer ID if existing, otherwise pass as company_name
       let finalCustId = null;
+      let finalCustName = null;
       const trimmedCust = String(customerId).trim();
       const existingCust = customers.find(
         (c) => String(c.id) === trimmedCust ||
@@ -150,46 +151,27 @@ export default function AddInvoice() {
       );
       if (existingCust) {
         finalCustId = existingCust.id;
+        finalCustName = existingCust.companyname;
       } else if (Number(trimmedCust)) {
         finalCustId = Number(trimmedCust);
       } else {
-        // Create new customer on the fly
-        const createCustRes = await customersApi.create({
-          companyname: trimmedCust,
-          mobile_no: customerContact || null,
-        });
-        finalCustId = createCustRes.data.id;
-        const newCustObj = { id: finalCustId, companyname: trimmedCust, mobile_no: customerContact };
-        setCustomers((prev) => [...prev, newCustObj]);
+        finalCustName = trimmedCust;
       }
 
-      // 2. Resolve or dynamically create products for items
-      const resolvedItems = [];
-      for (const it of itemsToSave) {
-        let pId = null;
+      // 2. Resolve items without making sequential roundtrips
+      const resolvedItems = itemsToSave.map((it) => {
         const trimmedProd = String(it.product_id).trim();
         const existingProd = products.find(
           (p) => String(p.id) === trimmedProd ||
                  p.productname?.toLowerCase().trim() === trimmedProd.toLowerCase()
         );
-        if (existingProd) {
-          pId = existingProd.id;
-        } else if (Number(trimmedProd)) {
-          pId = Number(trimmedProd);
-        } else {
-          // Create new product on the fly
-          const createProdRes = await productsApi.create({ productname: trimmedProd });
-          pId = createProdRes.data.id;
-          const newProdObj = { id: pId, productname: trimmedProd };
-          setProducts((prev) => [...prev, newProdObj]);
-        }
-        resolvedItems.push({
-          product_id: Number(pId),
+        return {
+          product_id: existingProd ? existingProd.id : (Number(trimmedProd) || trimmedProd),
           description: it.description || '',
           rate: Number(it.rate),
           quantity: Number(it.quantity),
-        });
-      }
+        };
+      });
 
       const autoPaymentStatus = paid >= subAmount && subAmount > 0
         ? 'Full Payment'
@@ -198,7 +180,8 @@ export default function AddInvoice() {
       const payload = {
         invoice_no: invoiceNo.trim(),
         invoice_date: invoiceDate,
-        customer_id: Number(finalCustId),
+        customer_id: finalCustId,
+        company_name: finalCustName,
         customer_contact: customerContact,
         items: resolvedItems,
         paid_amount: paid,

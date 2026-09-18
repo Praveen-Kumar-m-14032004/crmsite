@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { collection, nextId, now, numericId, isDuplicateError } = require('../utils/mongo');
+const { collection, nextId, nextIds, now, numericId, isDuplicateError } = require('../utils/mongo');
 const { buildPdf, createPdfStream, invoicePdfDefinition } = require('../utils/pdf');
 const { cached, invalidate } = require('../utils/cache');
 
@@ -362,26 +362,63 @@ function validatePayload(body) {
 }
 
 async function isGstBill(items) {
-  const products = await collection('products').find({ id: { $in: items.map((item) => numericId(item.product_id)).filter(Boolean) } }).toArray();
+  const pIds = items.map((item) => numericId(item.product_id)).filter(Boolean);
+  if (!pIds.length) return false;
+  const products = await collection('products').find({ id: { $in: pIds } }).toArray();
   return products.some((product) => product.productname === 'GST');
 }
 
-async function itemDocuments(invoiceId, items) {
-  return Promise.all(items.map(async (item) => {
-    let pId = numericId(item.product_id);
-    if (!pId && item.product_id) {
-      const pName = String(item.product_id).trim();
-      let p = await collection('products').findOne({ productname: { $regex: `^${pName}$`, $options: 'i' } });
-      if (!p) {
-        pId = await nextId('products');
-        p = { id: pId, productname: pName, created_at: now() };
-        await collection('products').insertOne(p);
-      } else {
-        pId = p.id;
+async function itemDocuments(invoiceId, items = []) {
+  if (!items.length) return [];
+
+  // 1. Resolve any text-based product names in one fast batch
+  const productMap = new Map();
+  const unknownNames = [];
+
+  for (const item of items) {
+    const pId = numericId(item.product_id);
+    if (pId) {
+      productMap.set(String(pId), pId);
+    } else if (item.product_id) {
+      unknownNames.push(String(item.product_id).trim());
+    }
+  }
+
+  if (unknownNames.length > 0) {
+    const regexes = unknownNames.map((n) => new RegExp(`^${escapeRegex(n)}$`, 'i'));
+    const existingProds = await collection('products')
+      .find({ productname: { $in: regexes } })
+      .toArray();
+
+    for (const ep of existingProds) {
+      productMap.set(ep.productname.toLowerCase(), ep.id);
+    }
+
+    const missingNames = [...new Set(unknownNames)].filter((n) => !productMap.has(n.toLowerCase()));
+    if (missingNames.length > 0) {
+      const newIds = await nextIds('products', missingNames.length);
+      const newProds = missingNames.map((name, i) => ({
+        id: newIds[i],
+        productname: name,
+        created_at: now(),
+      }));
+      await collection('products').insertMany(newProds);
+      for (let i = 0; i < missingNames.length; i += 1) {
+        productMap.set(missingNames[i].toLowerCase(), newIds[i]);
       }
     }
+  }
+
+  // 2. Allocate all item IDs in one single atomic step
+  const itemIds = await nextIds('invoice_items', items.length);
+
+  return items.map((item, idx) => {
+    let pId = numericId(item.product_id);
+    if (!pId && item.product_id) {
+      pId = productMap.get(String(item.product_id).trim().toLowerCase()) || 0;
+    }
     return {
-      id: await nextId('invoice_items'),
+      id: itemIds[idx],
       invoice_id: invoiceId,
       product_id: pId || 0,
       description: item.description || null,
@@ -391,7 +428,7 @@ async function itemDocuments(invoiceId, items) {
       created_at: now(),
       updated_at: now(),
     };
-  }));
+  });
 }
 
 async function create(req, res) {
@@ -407,7 +444,7 @@ async function create(req, res) {
     if (!customer && (req.body.company_name || customer_id)) {
       const name = String(req.body.company_name || customer_id).trim();
       if (name) {
-        let existing = await collection('customers').findOne({ companyname: { $regex: `^${name}$`, $options: 'i' } });
+        let existing = await collection('customers').findOne({ companyname: { $regex: `^${escapeRegex(name)}$`, $options: 'i' } });
         if (!existing) {
           custId = await nextId('customers');
           existing = { id: custId, companyname: name, person_incharge: null, mobile_no: customer_contact || null, email: null, address: null, created_at: now(), updated_at: now() };
@@ -419,7 +456,11 @@ async function create(req, res) {
     }
     if (!customer) return res.status(400).json({ message: 'Selected company/customer was not found. Please choose or enter an existing customer.' });
 
-    const gstBill = await isGstBill(items);
+    const [gstBill, docs] = await Promise.all([
+      isGstBill(items),
+      itemDocuments(id, items),
+    ]);
+
     await collection('invoices').insertOne({
       id,
       invoice_no: String(invoice_no).trim(),
@@ -439,9 +480,11 @@ async function create(req, res) {
       created_at: now(),
       updated_at: now(),
     });
-    await collection('invoice_items').insertMany(await itemDocuments(id, items));
+
+    if (docs.length > 0) {
+      await collection('invoice_items').insertMany(docs);
+    }
     invalidateCounts();
-    prewarmInvoicePdf(id);
     res.status(201).json({ id });
   } catch (error) {
     if (isDuplicateError(error)) return res.status(409).json({ message: 'Invoice number already exists' });
@@ -455,11 +498,13 @@ async function update(req, res) {
   const { invoice_no, invoice_date, customer_id, customer_contact, items, paid_amount, payment_type, payment_status, status, expected_version } = req.body;
   const { subAmount, dueAmount } = computeTotals(items, paid_amount);
   const id = numericId(req.params.id);
+  if (!id) return res.status(400).json({ message: 'Invalid invoice ID' });
 
   try {
     const existing = await collection('invoices').findOne({ id });
     if (!existing) return res.status(404).json({ message: 'Invoice not found' });
-    if (expected_version !== undefined && Number(expected_version) !== existing.version) {
+    const currentVersion = Number(existing.version || 0);
+    if (expected_version !== undefined && expected_version !== null && Number(expected_version) !== currentVersion) {
       return res.status(409).json({ message: 'This invoice was changed by someone else while you were editing. Reopen it to see the current version.' });
     }
     let custId = numericId(customer_id);
@@ -467,7 +512,7 @@ async function update(req, res) {
     if (!customer && (req.body.company_name || customer_id)) {
       const name = String(req.body.company_name || customer_id).trim();
       if (name) {
-        let match = await collection('customers').findOne({ companyname: { $regex: `^${name}$`, $options: 'i' } });
+        let match = await collection('customers').findOne({ companyname: { $regex: `^${escapeRegex(name)}$`, $options: 'i' } });
         if (!match) {
           custId = await nextId('customers');
           match = { id: custId, companyname: name, person_incharge: null, mobile_no: customer_contact || null, email: null, address: null, created_at: now(), updated_at: now() };
@@ -479,7 +524,11 @@ async function update(req, res) {
     }
     if (!customer) return res.status(400).json({ message: 'Customer not found' });
 
-    const gstBill = await isGstBill(items);
+    const [gstBill, docs] = await Promise.all([
+      isGstBill(items),
+      itemDocuments(id, items),
+    ]);
+
     await collection('invoices').updateOne(
       { id },
       {
@@ -501,10 +550,11 @@ async function update(req, res) {
       }
     );
     await collection('invoice_items').deleteMany({ invoice_id: id });
-    await collection('invoice_items').insertMany(await itemDocuments(id, items));
+    if (docs.length > 0) {
+      await collection('invoice_items').insertMany(docs);
+    }
     invalidateCounts();
     invalidateInvoicePdfCache(id);
-    prewarmInvoicePdf(id);
     res.json({ id });
   } catch (error) {
     if (isDuplicateError(error)) return res.status(409).json({ message: 'Invoice number already exists' });

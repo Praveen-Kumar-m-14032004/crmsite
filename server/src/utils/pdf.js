@@ -163,7 +163,8 @@ function payNowBadge() {
 
 /**
  * Ensure cell text wraps gracefully in PDF cells without pushing table columns.
- * Adds spaces after commas/delimiters and breaks unbroken strings > 16 chars.
+ * Standardizes delimiter spacing (, and ;) and uses soft zero-width breaks
+ * on very long continuous tokens (>24 chars) without corrupting word contents.
  */
 function formatCellText(str) {
   if (!str) return '';
@@ -171,15 +172,17 @@ function formatCellText(str) {
   return lines
     .map((line) => {
       let trimmed = line.trim();
-      // Ensure spaces after commas and semicolons if missing
-      trimmed = trimmed.replace(/,\s*/g, ', ').replace(/;\s*/g, '; ');
-      // Break any remaining unbroken word chunks longer than 16 chars
+      // Ensure clean spacing after commas and semicolons
+      trimmed = trimmed
+        .replace(/,\s*/g, ', ')
+        .replace(/;\s*/g, '; ');
+      // Use zero-width space \u200B for soft line breaks on unbroken strings > 24 chars
       return trimmed
         .split(' ')
         .map((word) => {
-          if (word.length > 16) {
-            const chunks = word.match(/.{1,16}/g) || [word];
-            return chunks.join(' ');
+          if (word.length > 24) {
+            const chunks = word.match(/.{1,14}/g) || [word];
+            return chunks.join('\u200B');
           }
           return word;
         })

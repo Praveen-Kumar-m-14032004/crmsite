@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { invoicesApi, settingsApi } from '../../api/endpoints';
-import { openViaApi, prefetchPdf } from '../../api/download';
+import { openViaApi, prefetchPdf, batchPrefetchPdfs, cancelBatchPrefetch } from '../../api/download';
 import { useDataTable } from '../../hooks/useDataTable';
 import { usePermissions } from '../../hooks/usePermissions';
 import { errorMessage, useToast } from '../../hooks/ToastContext';
@@ -27,6 +27,18 @@ const statusClass = (status) => ({
   Cancelled: 'is-cancelled',
 }[status] || '');
 
+/* Module-level settings cache — avoid re-fetching on every mount */
+let _settingsCache = null;
+let _settingsFetchedAt = 0;
+const SETTINGS_TTL = 5 * 60 * 1000; // 5 minutes
+
+function getCachedCurrency() {
+  if (_settingsCache && Date.now() - _settingsFetchedAt < SETTINGS_TTL) {
+    return _settingsCache;
+  }
+  return null;
+}
+
 export default function ManageInvoice() {
   const can = usePermissions();
   const navigate = useNavigate();
@@ -42,7 +54,7 @@ export default function ManageInvoice() {
   const [deleting, setDeleting] = useState(false);
   const [restoringId, setRestoringId] = useState(null);
   const [printingId, setPrintingId] = useState(null);
-  const [currency, setCurrency] = useState('SGD');
+  const [currency, setCurrency] = useState(() => getCachedCurrency() || 'SGD');
   const [counts, setCounts] = useState({ activeCount: 0, trashCount: 0 });
 
   const fetcher = useCallback((params) => {
@@ -57,6 +69,14 @@ export default function ManageInvoice() {
 
   const table = useDataTable(fetcher, { defaultSort: 'invoice_date', defaultDir: 'desc' });
 
+  // Batch-prefetch PDFs for all visible rows once data loads
+  useEffect(() => {
+    if (!isTrashRoute && table.data.length > 0 && can('invoices.print')) {
+      batchPrefetchPdfs(table.data);
+    }
+    return () => cancelBatchPrefetch();
+  }, [table.data, isTrashRoute]);
+
   useEffect(() => {
     const tab = location.pathname.includes('/trash') ? 'trash' : 'active';
     setActiveTab(tab);
@@ -66,8 +86,18 @@ export default function ManageInvoice() {
   }, [location.pathname]);
 
   useEffect(() => {
+    const cached = getCachedCurrency();
+    if (cached) {
+      setCurrency(cached);
+      return;
+    }
     settingsApi.get()
-      .then((res) => setCurrency(res.data?.default_currency || 'SGD'))
+      .then((res) => {
+        const cur = res.data?.default_currency || 'SGD';
+        setCurrency(cur);
+        _settingsCache = cur;
+        _settingsFetchedAt = Date.now();
+      })
       .catch(() => {});
   }, []);
 
@@ -117,7 +147,7 @@ export default function ManageInvoice() {
     }
   };
 
-  const handlePrint = async (row) => {
+  const handlePrint = useCallback(async (row) => {
     setPrintingId(row.id);
     try {
       await openViaApi(`/invoices/${row.id}/print`);
@@ -126,10 +156,10 @@ export default function ManageInvoice() {
     } finally {
       setPrintingId(null);
     }
-  };
+  }, [toast]);
 
-  // Active columns
-  const activeColumns = [
+  // Memoized active columns — only recalculates when printingId or currency changes
+  const activeColumns = useMemo(() => [
     { key: '#', label: '#', render: (_r, serial) => <span className="num text-muted">{serial}</span> },
     {
       key: 'invoice_no', label: 'Invoice', sortable: true,
@@ -172,10 +202,10 @@ export default function ManageInvoice() {
         </div>
       ),
     },
-  ];
+  ], [printingId, currency, can, navigate, handlePrint]);
 
-  // Trash columns
-  const trashColumns = [
+  // Memoized trash columns — only recalculates when restoringId or currency changes
+  const trashColumns = useMemo(() => [
     { key: '#', label: '#', render: (_r, serial) => <span className="num text-muted">{serial}</span> },
     {
       key: 'invoice_no', label: 'Invoice', sortable: true,
@@ -228,7 +258,7 @@ export default function ManageInvoice() {
         </div>
       ),
     },
-  ];
+  ], [restoringId, currency, can]);
 
   return (
     <div>

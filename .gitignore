@@ -2,6 +2,13 @@ node_modules/
 dist/
 .env
 *.log
+*.tmp
+*.pdf
 
-# Local Claude Code session settings
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# IDE / session settings
 .claude/
+.agents/

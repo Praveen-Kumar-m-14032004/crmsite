@@ -47,6 +47,10 @@ async function connect() {
     database.collection('invoices').createIndex({ is_deleted: 1, customer_id: 1 }),
     database.collection('invoices').createIndex({ is_deleted: 1, status: 1 }),
     database.collection('invoices').createIndex({ is_deleted: 1, payment_status: 1 }),
+    // Covers trash cleanup query: { is_deleted: true, deleted_at: { $lte: cutoff } }
+    database.collection('invoices').createIndex({ is_deleted: 1, deleted_at: 1 }),
+    // Covers trash list sorted by deleted_at
+    database.collection('invoices').createIndex({ is_deleted: 1, deleted_at: -1, id: -1 }),
     database.collection('invoice_items').createIndex({ id: 1 }, { unique: true }),
     database.collection('invoice_items').createIndex({ invoice_id: 1 }),
     database.collection('role_permissions').createIndex({ role_id: 1, permission_id: 1 }, { unique: true }),

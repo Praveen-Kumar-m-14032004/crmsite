@@ -25,7 +25,7 @@ const settingsRoutes = require('./src/routes/settings');
 
 const app = express();
 
-app.use(compression());
+app.use(compression({ threshold: 1024 }));
 app.use(cors({
   origin: (origin, callback) => callback(null, true),
   credentials: true,
@@ -54,10 +54,20 @@ app.get('/api/health', async (_req, res) => {
 
 app.use('/api', (_req, res) => res.status(404).json({ message: 'Endpoint not found' }));
 
-// Serve React frontend in production
+// Serve React frontend in production with aggressive caching for hashed assets
 const clientPath = path.join(__dirname, '..', 'client', 'dist');
 
-app.use(express.static(clientPath));
+// Vite-hashed assets (JS/CSS/images with content hashes in filenames) — cache for 1 year
+app.use('/assets', express.static(path.join(clientPath, 'assets'), {
+  maxAge: '1y',
+  immutable: true,
+}));
+
+// Other static files — cache for 1 hour
+app.use(express.static(clientPath, {
+  maxAge: '1h',
+  etag: true,
+}));
 
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api/')) {

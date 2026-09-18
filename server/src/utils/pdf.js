@@ -6,6 +6,7 @@ const FONT_DIR = path.join(__dirname, '..', 'assets', 'fonts');
 const LOGO_PATH = path.join(__dirname, '..', 'assets', 'logo.png');
 const PAYNOW_PATH = path.join(__dirname, '..', 'assets', 'paynow.png');
 
+/* ---- Pre-compute asset buffers at module load (once, not per PDF) ---- */
 let logoBase64 = null;
 let paynowBase64 = null;
 
@@ -35,6 +36,7 @@ const fonts = {
   },
 };
 
+// Singleton printer – reuse across all PDF generations
 const printer = new PdfPrinter(fonts);
 
 /* ---- Color palette (matches master reference PDF exactly) ---- */
@@ -63,6 +65,10 @@ function formatDate(d) {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+/**
+ * Build a PDF from a doc definition and return the full buffer.
+ * Use this when you need the complete buffer (e.g. for caching).
+ */
 function buildPdf(docDefinition) {
   const { defaultStyle, ...rest } = docDefinition;
 
@@ -83,6 +89,23 @@ function buildPdf(docDefinition) {
       reject(err);
     }
   });
+}
+
+/**
+ * Create a pdfmake doc stream that can be piped directly to an HTTP response.
+ * Use this for uncached PDF generation to reduce TTFB — the browser starts
+ * receiving bytes before the entire PDF is finished rendering.
+ */
+function createPdfStream(docDefinition) {
+  const { defaultStyle, ...rest } = docDefinition;
+  const doc = printer.createPdfKitDocument({
+    pageSize: 'A4',
+    pageMargins: [40, 35, 40, 45],
+    ...rest,
+    defaultStyle: { font: 'Lato', fontSize: 9.5, color: INK, ...defaultStyle },
+  });
+  doc.end();
+  return doc;
 }
 
 /* ---- Logo block: Permit Declaration with purple tick ---- */
@@ -568,6 +591,7 @@ function reportPdfDefinition(rows, filters, summary) {
 
 module.exports = {
   buildPdf,
+  createPdfStream,
   invoicePdfDefinition,
   reportPdfDefinition,
   formatDate,

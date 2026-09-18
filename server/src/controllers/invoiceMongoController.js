@@ -1,26 +1,29 @@
+const crypto = require('crypto');
 const { collection, nextId, now, numericId, isDuplicateError } = require('../utils/mongo');
-const { buildPdf, invoicePdfDefinition } = require('../utils/pdf');
-const { invalidate } = require('../utils/cache');
+const { buildPdf, createPdfStream, invoicePdfDefinition } = require('../utils/pdf');
+const { cached, invalidate } = require('../utils/cache');
 
-let totalCache = null;
-const TOTAL_TTL_MS = 30000;
 const TEN_DAYS_MS = 10 * 24 * 60 * 60 * 1000;
+const TOTAL_TTL_MS = 30_000;
+const TRASH_COUNT_TTL_MS = 30_000;
+const SETTINGS_TTL_MS = 300_000;
 
-const invalidateTotal = () => { totalCache = null; invalidate('dashboard:'); };
-
-function escapeRegex(str) {
-  return String(str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+/* ============================================================
+ * Trash cleanup — runs hourly via setInterval, NOT on every list() call
+ * ============================================================ */
 
 async function cleanupExpiredTrash() {
   try {
     const cutoff = new Date(Date.now() - TEN_DAYS_MS).toISOString();
-    const expired = await collection('invoices').find({ is_deleted: true, deleted_at: { $lte: cutoff } }).toArray();
+    const expired = await collection('invoices')
+      .find({ is_deleted: true, deleted_at: { $lte: cutoff } })
+      .toArray();
     if (expired.length > 0) {
       const ids = expired.map((i) => i.id);
       await collection('invoice_items').deleteMany({ invoice_id: { $in: ids } });
       await collection('invoices').deleteMany({ id: { $in: ids } });
-      invalidateTotal();
+      invalidate('invoice:');
+      invalidate('dashboard:');
     }
   } catch (err) {
     console.error('Trash cleanup error:', err);
@@ -28,28 +31,109 @@ async function cleanupExpiredTrash() {
 }
 setInterval(cleanupExpiredTrash, 60 * 60 * 1000);
 
-async function totalInvoices() {
-  if (totalCache && Date.now() - totalCache.at < TOTAL_TTL_MS) return totalCache.value;
-  const value = await collection('invoices').countDocuments({ is_deleted: { $ne: true } });
-  totalCache = { value, at: Date.now() };
-  return value;
+/* ============================================================
+ * Cached helpers
+ * ============================================================ */
+
+function totalInvoices() {
+  return cached('invoice:totalActive', TOTAL_TTL_MS, () =>
+    collection('invoices').countDocuments({ is_deleted: { $ne: true } })
+  );
 }
 
-async function nextNumber(_req, res) {
-  const invoices = await collection('invoices')
-    .find({}, { projection: { invoice_no: 1 } })
-    .sort({ id: -1 })
-    .limit(100)
-    .toArray();
-  let maxSeq = 100; // first invoice will be 101
-  for (const inv of invoices) {
-    const parts = String(inv.invoice_no).split('-');
-    const seq = Number(parts[parts.length - 1]) || Number(inv.invoice_no) || 0;
-    if (seq > maxSeq) maxSeq = seq;
+function totalTrash() {
+  return cached('invoice:totalTrash', TRASH_COUNT_TTL_MS, () =>
+    collection('invoices').countDocuments({ is_deleted: true })
+  );
+}
+
+function getCompanySettings() {
+  return cached('invoice:companySettings', SETTINGS_TTL_MS, async () =>
+    (await collection('company_settings').findOne({})) || {}
+  );
+}
+
+function invalidateCounts() {
+  invalidate('invoice:totalActive');
+  invalidate('invoice:totalTrash');
+  invalidate('dashboard:');
+}
+
+/* ============================================================
+ * LRU PDF buffer cache
+ * ============================================================ */
+
+const invoicePdfCache = new Map();
+const MAX_PDF_CACHE = 500;
+
+function lruGet(key) {
+  const val = invoicePdfCache.get(key);
+  if (val !== undefined) {
+    // LRU touch: move to end
+    invoicePdfCache.delete(key);
+    invoicePdfCache.set(key, val);
   }
-  const d = new Date();
-  const prefix = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-  res.json({ invoice_no: `${prefix}-${maxSeq + 1}` });
+  return val;
+}
+
+function lruSet(key, value) {
+  if (invoicePdfCache.size >= MAX_PDF_CACHE) {
+    // Evict oldest (first key in Map iteration order)
+    const oldest = invoicePdfCache.keys().next().value;
+    invoicePdfCache.delete(oldest);
+  }
+  invoicePdfCache.set(key, value);
+}
+
+function getInvoicePdfCacheKey(invoice) {
+  return `${invoice.id}:${invoice.updated_at || invoice.created_at || ''}:${invoice.status || ''}:${invoice.sub_amount || ''}`;
+}
+
+/**
+ * Compute a short ETag hash from the cache key.
+ * This lets the browser skip re-downloading an unchanged PDF.
+ */
+function computeETag(cacheKey) {
+  return `"${crypto.createHash('md5').update(cacheKey).digest('hex').slice(0, 16)}"`;
+}
+
+function invalidateInvoicePdfCache(id) {
+  if (!id) return;
+  const prefix = `${id}:`;
+  for (const key of invoicePdfCache.keys()) {
+    if (key.startsWith(prefix)) {
+      invoicePdfCache.delete(key);
+    }
+  }
+}
+
+/* ============================================================
+ * Prewarm — fire-and-forget after create/update/restore
+ * ============================================================ */
+
+async function prewarmInvoicePdf(id) {
+  try {
+    const [invoice, settings] = await Promise.all([
+      getInvoiceWithItems(id),
+      getCompanySettings(),
+    ]);
+    if (!invoice) return;
+    const key = getInvoicePdfCacheKey(invoice);
+    if (!lruGet(key)) {
+      const buffer = await buildPdf(invoicePdfDefinition(invoice, invoice.items || [], settings));
+      lruSet(key, buffer);
+    }
+  } catch (_e) {
+    // Non-blocking prewarm — errors are swallowed intentionally
+  }
+}
+
+/* ============================================================
+ * Shared helpers
+ * ============================================================ */
+
+function escapeRegex(str) {
+  return String(str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 const customerLookup = () => [
@@ -78,10 +162,33 @@ const projection = () => ({
   companyname: '$customer.companyname',
 });
 
+/* ============================================================
+ * REST handlers
+ * ============================================================ */
+
+async function nextNumber(_req, res) {
+  const invoices = await collection('invoices')
+    .find({}, { projection: { invoice_no: 1 } })
+    .sort({ id: -1 })
+    .limit(100)
+    .toArray();
+  let maxSeq = 100; // first invoice will be 101
+  for (const inv of invoices) {
+    const parts = String(inv.invoice_no).split('-');
+    const seq = Number(parts[parts.length - 1]) || Number(inv.invoice_no) || 0;
+    if (seq > maxSeq) maxSeq = seq;
+  }
+  const d = new Date();
+  const prefix = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  res.json({ invoice_no: `${prefix}-${maxSeq + 1}` });
+}
+
 async function list(req, res) {
   const { search = '', page = 1, limit = 10, sort = 'invoice_date', dir = 'desc', company, customer_id, trash } = req.query;
   const isTrash = trash === 'true' || trash === true;
-  if (isTrash) await cleanupExpiredTrash();
+
+  // NOTE: trash cleanup removed from here — it runs on an hourly setInterval instead.
+  // Running it on every page load was adding 50–200ms per request.
 
   const sortable = ['invoice_date', 'invoice_no', 'sub_amount', 'due_amount', 'created_at', 'deleted_at'];
   const sortCol = sortable.includes(sort) ? sort : (isTrash ? 'deleted_at' : 'invoice_date');
@@ -126,8 +233,9 @@ async function list(req, res) {
   ]).toArray();
 
   const filteredTotal = result.count[0]?.total || 0;
-  const totalTrash = await collection('invoices').countDocuments({ is_deleted: true });
-  const totalActive = await totalInvoices();
+
+  // Both counts are cached — no extra DB roundtrips on normal page loads
+  const [totalTrashCount, totalActive] = await Promise.all([totalTrash(), totalInvoices()]);
 
   const nowMs = Date.now();
   const data = (result.data || []).map((row) => {
@@ -147,7 +255,7 @@ async function list(req, res) {
     limit: limitNum,
     meta: {
       activeCount: totalActive,
-      trashCount: totalTrash,
+      trashCount: totalTrashCount,
     },
   });
 }
@@ -332,7 +440,7 @@ async function create(req, res) {
       updated_at: now(),
     });
     await collection('invoice_items').insertMany(await itemDocuments(id, items));
-    invalidateTotal();
+    invalidateCounts();
     prewarmInvoicePdf(id);
     res.status(201).json({ id });
   } catch (error) {
@@ -394,7 +502,7 @@ async function update(req, res) {
     );
     await collection('invoice_items').deleteMany({ invoice_id: id });
     await collection('invoice_items').insertMany(await itemDocuments(id, items));
-    invalidateTotal();
+    invalidateCounts();
     invalidateInvoicePdfCache(id);
     prewarmInvoicePdf(id);
     res.json({ id });
@@ -410,7 +518,7 @@ async function patchStatus(req, res) {
   const newStatus = (req.body.status && String(req.body.status).toLowerCase() === 'pending') ? 'Unpaid' : req.body.status;
   const result = await collection('invoices').updateOne({ id }, { $set: { status: newStatus, updated_at: now() } });
   if (!result.matchedCount) return res.status(404).json({ message: 'Invoice not found' });
-  invalidateTotal();
+  invalidateCounts();
   invalidateInvoicePdfCache(id);
   prewarmInvoicePdf(id);
   res.json({ message: 'Status updated' });
@@ -424,7 +532,7 @@ async function remove(req, res) {
     { $set: { is_deleted: true, deleted_at: now(), updated_at: now() } }
   );
   if (!result.matchedCount) return res.status(404).json({ message: 'Invoice not found' });
-  invalidateTotal();
+  invalidateCounts();
   invalidateInvoicePdfCache(id);
   res.json({ message: 'Invoice moved to trash' });
 }
@@ -437,7 +545,7 @@ async function restore(req, res) {
     { $set: { is_deleted: false, deleted_at: null, updated_at: now() } }
   );
   if (!result.matchedCount) return res.status(404).json({ message: 'Invoice not found' });
-  invalidateTotal();
+  invalidateCounts();
   invalidateInvoicePdfCache(id);
   prewarmInvoicePdf(id);
   res.json({ message: 'Invoice restored successfully' });
@@ -449,56 +557,17 @@ async function permanentDelete(req, res) {
   const result = await collection('invoices').deleteOne({ id });
   if (!result.deletedCount) return res.status(404).json({ message: 'Invoice not found' });
   await collection('invoice_items').deleteMany({ invoice_id: id });
-  invalidateTotal();
+  invalidateCounts();
   invalidateInvoicePdfCache(id);
   res.json({ message: 'Invoice permanently deleted' });
 }
 
-let settingsCache = null;
-let settingsCacheTime = 0;
-async function getCompanySettings() {
-  if (settingsCache && Date.now() - settingsCacheTime < 300000) return settingsCache;
-  settingsCache = (await collection('company_settings').findOne({})) || {};
-  settingsCacheTime = Date.now();
-  return settingsCache;
-}
-
-const invoicePdfCache = new Map();
-const MAX_PDF_CACHE = 500;
-
-function getInvoicePdfCacheKey(invoice) {
-  return `${invoice.id}:${invoice.updated_at || invoice.created_at || ''}:${invoice.status || ''}:${invoice.sub_amount || ''}`;
-}
-
-function invalidateInvoicePdfCache(id) {
-  if (!id) return;
-  for (const key of invoicePdfCache.keys()) {
-    if (key.startsWith(`${id}:`)) {
-      invoicePdfCache.delete(key);
-    }
-  }
-}
-
-async function prewarmInvoicePdf(id) {
-  try {
-    const [invoice, settings] = await Promise.all([
-      getInvoiceWithItems(id),
-      getCompanySettings(),
-    ]);
-    if (!invoice) return;
-    const key = getInvoicePdfCacheKey(invoice);
-    if (!invoicePdfCache.has(key)) {
-      const buffer = await buildPdf(invoicePdfDefinition(invoice, invoice.items || [], settings));
-      if (invoicePdfCache.size >= MAX_PDF_CACHE) {
-        const firstKey = invoicePdfCache.keys().next().value;
-        invoicePdfCache.delete(firstKey);
-      }
-      invoicePdfCache.set(key, buffer);
-    }
-  } catch (_e) {
-    // Non-blocking prewarm
-  }
-}
+/* ============================================================
+ * Print — the hot path. Optimized with:
+ *   1. LRU buffer cache (most invoices served from memory)
+ *   2. ETag / 304 Not Modified (browser skips download entirely)
+ *   3. Streaming fallback (uncached PDFs stream to response)
+ * ============================================================ */
 
 async function print(req, res) {
   const id = numericId(req.params.id);
@@ -512,21 +581,52 @@ async function print(req, res) {
   if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
 
   const cacheKey = getInvoicePdfCacheKey(invoice);
-  let pdfBuffer = invoicePdfCache.get(cacheKey);
+  const etag = computeETag(cacheKey);
 
-  if (!pdfBuffer) {
-    pdfBuffer = await buildPdf(invoicePdfDefinition(invoice, invoice.items || [], settings));
-    if (invoicePdfCache.size >= MAX_PDF_CACHE) {
-      const firstKey = invoicePdfCache.keys().next().value;
-      invoicePdfCache.delete(firstKey);
-    }
-    invoicePdfCache.set(cacheKey, pdfBuffer);
+  // ETag match — browser already has this PDF, skip everything
+  if (req.headers['if-none-match'] === etag) {
+    return res.status(304).end();
   }
 
+  // Common headers
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="invoice-${invoice.invoice_no}.pdf"`);
   res.setHeader('Cache-Control', 'private, max-age=300');
-  res.send(pdfBuffer);
+  res.setHeader('ETag', etag);
+
+  // Try cache first (LRU)
+  const cachedBuffer = lruGet(cacheKey);
+  if (cachedBuffer) {
+    res.setHeader('Content-Length', cachedBuffer.length);
+    return res.send(cachedBuffer);
+  }
+
+  // Cache miss: build PDF and stream while also caching
+  const docDef = invoicePdfDefinition(invoice, invoice.items || [], settings);
+  const pdfStream = createPdfStream(docDef);
+  const chunks = [];
+
+  pdfStream.on('data', (chunk) => {
+    chunks.push(chunk);
+    // Write each chunk to response as it arrives (streaming)
+    res.write(chunk);
+  });
+
+  pdfStream.on('end', () => {
+    // Cache the full buffer for next time
+    const buffer = Buffer.concat(chunks);
+    lruSet(cacheKey, buffer);
+    res.end();
+  });
+
+  pdfStream.on('error', (err) => {
+    console.error('[pdf] stream error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'PDF generation failed' });
+    } else {
+      res.end();
+    }
+  });
 }
 
 module.exports = {

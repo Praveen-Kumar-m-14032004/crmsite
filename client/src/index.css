@@ -844,19 +844,28 @@ table.datatable td .cell-strong { font-weight: 600; color: var(--ink); }
   border-right: none;
 }
 .line-items-table tbody tr:last-child td { border-bottom: none; }
-.line-items-table input, .line-items-table select {
+.line-items-table input, .line-items-table select, .line-items-table textarea, .line-item-desc {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
   border: 1.5px solid rgba(109, 36, 117, 0.35);
-  border-radius: var(--r-pill);
+  border-radius: var(--r-md);
   padding: 8px 12px;
   font-size: 13px;
   font-family: inherit;
   background: #fff;
   transition: border-color 0.16s var(--ease), box-shadow 0.16s var(--ease);
 }
-.line-items-table input:focus, .line-items-table select:focus {
+.line-items-table input, .line-items-table select {
+  border-radius: var(--r-pill);
+}
+.line-items-table textarea, .line-item-desc {
+  resize: vertical;
+  min-height: 38px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.line-items-table input:focus, .line-items-table select:focus, .line-items-table textarea:focus, .line-item-desc:focus {
   outline: none; border-color: #6d2475; box-shadow: 0 0 0 3px rgba(109, 36, 117, 0.15);
 }
 .line-items-table input[readonly] {

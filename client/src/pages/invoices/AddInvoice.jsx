@@ -60,8 +60,8 @@ export default function AddInvoice() {
           setInvoiceStatus(inv.status && String(inv.status).toLowerCase() === 'pending' ? 'Unpaid' : (inv.status || 'Unpaid'));
           setLoadedVersion(inv.version ?? null);
           setItems(inv.items && inv.items.length ? inv.items.map((it) => ({
-            product_id: String(it.product_id),
-            description: it.description || '',
+            product_id: it.product_id ? String(it.product_id) : (it.productname || ''),
+            description: it.description ?? '',
             rate: String(it.rate),
             quantity: String(Number(it.quantity)),
           })) : defaultItems());
@@ -316,8 +316,11 @@ export default function AddInvoice() {
                       />
                     </td>
                     <td>
-                      <input
-                        value={item.description}
+                      <textarea
+                        className="line-item-desc"
+                        rows={Math.max(1, Math.min(5, (item.description || '').split('\n').length))}
+                        value={item.description ?? ''}
+                        placeholder="Enter description..."
                         onChange={(e) => updateItem(idx, 'description', e.target.value)}
                       />
                     </td>

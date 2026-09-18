@@ -555,6 +555,7 @@ async function update(req, res) {
     }
     invalidateCounts();
     invalidateInvoicePdfCache(id);
+    prewarmInvoicePdf(id);
     res.json({ id });
   } catch (error) {
     if (isDuplicateError(error)) return res.status(409).json({ message: 'Invoice number already exists' });

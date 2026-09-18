@@ -128,6 +128,14 @@ export function cancelBatchPrefetch() {
  * Invalidate a cached PDF (call after invoice update).
  */
 export function invalidatePdfCache(path) {
+  if (!path) {
+    pdfBlobCache.forEach((url) => {
+      try { window.URL.revokeObjectURL(url); } catch (_) {}
+    });
+    pdfBlobCache.clear();
+    etagCache.clear();
+    return;
+  }
   const url = pdfBlobCache.get(path);
   if (url) {
     try { window.URL.revokeObjectURL(url); } catch (_) {}

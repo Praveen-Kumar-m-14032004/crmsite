@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { customersApi, invoicesApi, productsApi, settingsApi } from '../../api/endpoints';
+import { invalidatePdfCache } from '../../api/download';
 import { errorMessage, useToast } from '../../hooks/ToastContext';
 import { toDateInputValue } from '../../utils/date';
 import { PlusIcon, SpinnerIcon, TrashIcon } from '../../components/common/Icons';
@@ -179,6 +180,10 @@ export default function AddInvoice() {
         ? 'Full Payment'
         : (paid > 0 ? 'Partial Payment' : 'Due');
 
+      const finalStatus = paid >= subAmount && subAmount > 0
+        ? 'Paid'
+        : (isEdit ? (invoiceStatus || 'Unpaid') : 'Unpaid');
+
       const payload = {
         invoice_no: invoiceNo.trim(),
         invoice_date: invoiceDate,
@@ -189,15 +194,19 @@ export default function AddInvoice() {
         paid_amount: paid,
         payment_type: paymentType || null,
         payment_status: autoPaymentStatus,
-        status: isEdit ? invoiceStatus : 'Unpaid',
+        status: finalStatus,
         ...(isEdit && loadedVersion !== null ? { expected_version: loadedVersion } : {}),
       };
 
       if (isEdit) {
         await invoicesApi.update(id, payload);
+        invalidatePdfCache(`/invoices/${id}/print`);
         toast.success(`Invoice #${payload.invoice_no} updated`);
       } else {
-        await invoicesApi.create(payload);
+        const createRes = await invoicesApi.create(payload);
+        if (createRes.data?.id) {
+          invalidatePdfCache(`/invoices/${createRes.data.id}/print`);
+        }
         toast.success(`Invoice #${payload.invoice_no} created`);
       }
       navigate('/invoices');

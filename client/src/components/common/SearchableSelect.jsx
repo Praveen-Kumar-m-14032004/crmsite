@@ -6,7 +6,7 @@ export default function SearchableSelect({
   options = [],
   value = '',
   onChange,
-  placeholder = 'Select product…',
+  placeholder = 'Select…',
   required = false,
   disabled = false,
   allowCustom = true,
@@ -14,6 +14,7 @@ export default function SearchableSelect({
 }) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
   const [highlightIdx, setHighlightIdx] = useState(0);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0, maxHeight: 260, openUp: false });
 
@@ -29,26 +30,38 @@ export default function SearchableSelect({
 
   const displayValue = selected ? selected.label : (value ? String(value) : '');
 
+  // Filter options: if user has not actively typed, show all options!
   const filtered = useMemo(() => {
-    if (!query.trim()) return options;
+    if (!isTyping || !query.trim() || query.trim().toLowerCase() === displayValue.trim().toLowerCase()) {
+      return options;
+    }
     const q = query.toLowerCase().trim();
     return options.filter((o) =>
       o.label.toLowerCase().includes(q) ||
       (o.sub && o.sub.toLowerCase().includes(q)) ||
-      String(o.value).toLowerCase() === q
+      String(o.value).toLowerCase().includes(q)
     );
-  }, [options, query]);
-
-  useEffect(() => {
-    setHighlightIdx(0);
-  }, [filtered.length]);
+  }, [options, query, displayValue, isTyping]);
 
   // Keep query synced with selected option or custom value when closed
   useEffect(() => {
     if (!open) {
       setQuery(displayValue);
+      setIsTyping(false);
     }
   }, [displayValue, open]);
+
+  // Scroll active/highlighted item into view on open
+  useEffect(() => {
+    if (open) {
+      const selIdx = options.findIndex((o) => String(o.value) === String(value));
+      const targetIdx = selIdx >= 0 ? selIdx : 0;
+      setHighlightIdx(targetIdx);
+      setTimeout(() => {
+        optionsListRef.current[targetIdx]?.scrollIntoView({ block: 'nearest' });
+      }, 30);
+    }
+  }, [open, options, value]);
 
   // Calculate coordinates for portal rendering
   const updatePosition = useCallback(() => {
@@ -64,8 +77,8 @@ export default function SearchableSelect({
     // Flip upwards if space below is too tight and space above is larger
     const openUp = spaceBelow < menuDesiredHeight && spaceAbove > spaceBelow;
 
-    // Dynamic width: match input but allow expanding up to min 280px for long product names
-    const minW = Math.max(rect.width, 280);
+    // Dynamic width: match input but allow expanding up to min 280px for long labels
+    const minW = Math.max(rect.width, 240);
     const width = Math.min(minW, viewportWidth - 24);
 
     let left = rect.left;
@@ -105,14 +118,25 @@ export default function SearchableSelect({
     };
   }, [open, updatePosition]);
 
+  const handleOpen = () => {
+    setOpen(true);
+    setIsTyping(false);
+    setQuery(displayValue);
+  };
+
   const handleSelect = (val) => {
     onChange?.(val);
     const opt = options.find((o) => String(o.value) === String(val));
     setQuery(opt?.label || String(val) || '');
+    setIsTyping(false);
     setOpen(false);
   };
 
   const commitSelection = (text) => {
+    if (!isTyping) {
+      setOpen(false);
+      return;
+    }
     const q = (text !== undefined ? text : query).trim();
     if (!q) {
       onChange?.('');
@@ -173,13 +197,14 @@ export default function SearchableSelect({
     };
     document.addEventListener('mousedown', handleDocClick);
     return () => document.removeEventListener('mousedown', handleDocClick);
-  }, [open, query, options, filtered, selected, highlightIdx, allowCustom]);
+  }, [open, query, options, filtered, selected, highlightIdx, allowCustom, isTyping]);
 
   const handleClear = (e) => {
     e.preventDefault();
     e.stopPropagation();
     onChange?.('');
     setQuery('');
+    setIsTyping(false);
     setOpen(false);
     inputRef.current?.focus();
   };
@@ -189,7 +214,7 @@ export default function SearchableSelect({
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (!open) {
-        setOpen(true);
+        handleOpen();
       } else {
         const nextIdx = highlightIdx + 1 < filtered.length ? highlightIdx + 1 : 0;
         setHighlightIdx(nextIdx);
@@ -198,7 +223,7 @@ export default function SearchableSelect({
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       if (!open) {
-        setOpen(true);
+        handleOpen();
       } else {
         const prevIdx = highlightIdx - 1 >= 0 ? highlightIdx - 1 : filtered.length - 1;
         setHighlightIdx(prevIdx);
@@ -207,10 +232,16 @@ export default function SearchableSelect({
     } else if (e.key === 'Enter') {
       if (open) {
         e.preventDefault();
-        commitSelection();
+        if (filtered.length > 0) {
+          const pick = filtered[highlightIdx] || filtered[0];
+          handleSelect(pick.value);
+        } else {
+          commitSelection();
+        }
       }
     } else if (e.key === 'Escape') {
       setOpen(false);
+      setIsTyping(false);
       setQuery(displayValue);
     } else if (e.key === 'Tab') {
       if (open) {
@@ -219,7 +250,8 @@ export default function SearchableSelect({
     }
   };
 
-  const showCustomOption = allowCustom && query.trim() && !options.some((o) => o.label.toLowerCase() === query.trim().toLowerCase());
+  const showCustomOption = allowCustom && isTyping && query.trim() && !options.some((o) => o.label.toLowerCase() === query.trim().toLowerCase());
+  const hasClearableValue = (Boolean(value) && String(value).toLowerCase() !== 'all') || (isTyping && Boolean(query));
 
   return (
     <div className={`ss-wrap${open ? ' ss-is-open' : ''} ${className}`.trim()} ref={wrapRef}>
@@ -235,18 +267,21 @@ export default function SearchableSelect({
           disabled={disabled}
           onChange={(e) => {
             setQuery(e.target.value);
+            setIsTyping(true);
             if (!open) setOpen(true);
           }}
           onFocus={() => {
-            setOpen(true);
-            setQuery(displayValue);
+            handleOpen();
             setTimeout(() => inputRef.current?.select(), 0);
+          }}
+          onClick={() => {
+            if (!open) handleOpen();
           }}
           onKeyDown={handleKeyDown}
           required={required && !value}
         />
         <div className="ss-actions">
-          {Boolean(value || query) && !disabled && (
+          {hasClearableValue && !disabled && (
             <button
               type="button"
               className="ss-clear"
@@ -272,8 +307,7 @@ export default function SearchableSelect({
               if (open) {
                 commitSelection();
               } else {
-                setOpen(true);
-                setQuery(displayValue);
+                handleOpen();
                 inputRef.current?.focus();
               }
             }}

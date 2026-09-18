@@ -652,7 +652,7 @@ table.datatable th {
   color: #ffffff;
   background-color: #6d2475;
   border-bottom: 2px solid #551a5c;
-  border-right: 1px solid rgba(255, 255, 255, 0.18);
+  border-right: 1px solid rgba(255, 255, 255, 0.28);
   white-space: nowrap;
   user-select: none;
 }
@@ -704,8 +704,8 @@ table.datatable th .sort-ind.on .sort-arrow {
 
 table.datatable td {
   padding: 13px 16px;
-  border-bottom: 1px solid rgba(109, 36, 117, 0.18);
-  border-right: 1px solid rgba(109, 36, 117, 0.12);
+  border-bottom: 1px solid rgba(109, 36, 117, 0.35);
+  border-right: 1px solid rgba(109, 36, 117, 0.35);
   color: var(--ink-2);
   vertical-align: middle;
 }
@@ -829,7 +829,7 @@ table.datatable td .cell-strong { font-weight: 600; color: var(--ink); }
   color: #ffffff;
   background-color: #6d2475;
   border-bottom: 2px solid #551a5c;
-  border-right: 1px solid rgba(255, 255, 255, 0.18);
+  border-right: 1px solid rgba(255, 255, 255, 0.28);
   white-space: nowrap;
 }
 .line-items-table th:last-child {
@@ -837,8 +837,8 @@ table.datatable td .cell-strong { font-weight: 600; color: var(--ink); }
 }
 .line-items-table td {
   padding: 10px 12px;
-  border-bottom: 1px solid rgba(109, 36, 117, 0.18);
-  border-right: 1px solid rgba(109, 36, 117, 0.12);
+  border-bottom: 1px solid rgba(109, 36, 117, 0.35);
+  border-right: 1px solid rgba(109, 36, 117, 0.35);
 }
 .line-items-table td:last-child {
   border-right: none;

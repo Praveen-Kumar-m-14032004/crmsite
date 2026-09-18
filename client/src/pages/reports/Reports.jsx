@@ -147,6 +147,7 @@ export default function Reports() {
                 onChange={(val) => setFilters((f) => ({ ...f, paymentStatus: val || 'All' }))}
                 placeholder="All payment statuses"
                 allowCustom={false}
+                clearable={false}
               />
             </div>
             <div className="form-field">
@@ -158,6 +159,7 @@ export default function Reports() {
                 onChange={(val) => setFilters((f) => ({ ...f, status: val || 'All' }))}
                 placeholder="All invoice statuses"
                 allowCustom={false}
+                clearable={false}
               />
             </div>
             <div className="form-field">

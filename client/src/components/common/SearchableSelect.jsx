@@ -10,6 +10,7 @@ export default function SearchableSelect({
   required = false,
   disabled = false,
   allowCustom = true,
+  clearable = true,
   className = '',
 }) {
   const [query, setQuery] = useState('');
@@ -251,7 +252,9 @@ export default function SearchableSelect({
   };
 
   const showCustomOption = allowCustom && isTyping && query.trim() && !options.some((o) => o.label.toLowerCase() === query.trim().toLowerCase());
-  const hasClearableValue = (Boolean(value) && String(value).toLowerCase() !== 'all') || (isTyping && Boolean(query));
+  const hasClearableValue = clearable && !disabled && (
+    (Boolean(value) && String(value).toLowerCase() !== 'all') || (isTyping && Boolean(query))
+  );
 
   return (
     <div className={`ss-wrap${open ? ' ss-is-open' : ''} ${className}`.trim()} ref={wrapRef}>

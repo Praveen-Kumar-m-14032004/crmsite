@@ -162,35 +162,69 @@ function payNowBadge() {
 }
 
 /**
- * Compute dynamic spacing parameters based on item count.
- * This ensures the invoice fits on a single A4 page for normal item counts
- * while maintaining pixel-perfect proportions to the reference PDF.
+ * Ensure cell text wraps gracefully in PDF cells without pushing table columns.
+ * Adds spaces after commas/delimiters and breaks unbroken strings > 16 chars.
+ */
+function formatCellText(str) {
+  if (!str) return '';
+  const lines = String(str).split('\n');
+  return lines
+    .map((line) => {
+      let trimmed = line.trim();
+      // Ensure spaces after commas and semicolons if missing
+      trimmed = trimmed.replace(/,\s*/g, ', ').replace(/;\s*/g, '; ');
+      // Break any remaining unbroken word chunks longer than 16 chars
+      return trimmed
+        .split(' ')
+        .map((word) => {
+          if (word.length > 16) {
+            const chunks = word.match(/.{1,16}/g) || [word];
+            return chunks.join(' ');
+          }
+          return word;
+        })
+        .join(' ');
+    })
+    .join('\n');
+}
+
+/**
+ * Estimate rendered line count for an item (product name + description).
+ */
+function estimateItemLines(item) {
+  const prodLen = (item.productname || '').length;
+  const desc = String(item.description || '');
+  const descLines = desc.split('\n');
+  let totalDescLines = 0;
+  for (const line of descLines) {
+    totalDescLines += Math.max(1, Math.ceil(line.length / 28));
+  }
+  const prodLines = Math.max(1, Math.ceil(prodLen / 20));
+  return Math.max(prodLines, totalDescLines);
+}
+
+/**
+ * Compute dynamic spacing parameters based on items and total line count.
+ * This ensures the invoice fits comfortably on a single A4 page for normal
+ * and multi-line descriptions while maintaining proportions.
  *
  * A4 dimensions: 595.28pt × 841.89pt
  * Usable height ≈ 771.89pt (841.89 - 35 top - 45 bottom margins).
  */
-function getSpacing(itemCount) {
+function getSpacing(items) {
+  const itemsList = Array.isArray(items) ? items : (typeof items === 'number' ? new Array(items).fill({}) : []);
+  const itemCount = itemsList.length;
+  const totalLines = itemsList.reduce((sum, it) => sum + estimateItemLines(it), 0);
+
   const fixed = {
     dateLineSize: 9,
     invoiceNoSize: 13,
   };
 
-  if (itemCount <= 3) {
-    return {
-      ...fixed,
-      headerBottomMargin: 20,
-      fromToBottomMargin: 16,
-      tablePaddingV: 8,
-      footerTopMargin: 210,
-      fromFontSize: 8.5,
-      toFontSize: 8.5,
-      partyNameSize: 10,
-      cellFontSize: 8.5,
-      thFontSize: 8.5,
-      totalBoxMarginTop: 2,
-    };
-  }
-  if (itemCount <= 5) {
+  // Determine effective height factor combining row count and description lines
+  const effectiveCount = Math.max(itemCount, Math.ceil(totalLines * 0.75));
+
+  if (effectiveCount <= 2) {
     return {
       ...fixed,
       headerBottomMargin: 20,
@@ -205,13 +239,28 @@ function getSpacing(itemCount) {
       totalBoxMarginTop: 2,
     };
   }
-  if (itemCount <= 8) {
+  if (effectiveCount <= 4) {
     return {
       ...fixed,
-      headerBottomMargin: 16,
+      headerBottomMargin: 18,
       fromToBottomMargin: 14,
-      tablePaddingV: 6,
-      footerTopMargin: 100,
+      tablePaddingV: 7,
+      footerTopMargin: 120,
+      fromFontSize: 8.5,
+      toFontSize: 8.5,
+      partyNameSize: 10,
+      cellFontSize: 8.5,
+      thFontSize: 8.5,
+      totalBoxMarginTop: 2,
+    };
+  }
+  if (effectiveCount <= 7) {
+    return {
+      ...fixed,
+      headerBottomMargin: 14,
+      fromToBottomMargin: 12,
+      tablePaddingV: 5.5,
+      footerTopMargin: 60,
       fromFontSize: 8,
       toFontSize: 8,
       partyNameSize: 9.5,
@@ -220,13 +269,13 @@ function getSpacing(itemCount) {
       totalBoxMarginTop: 2,
     };
   }
-  if (itemCount <= 10) {
+  if (effectiveCount <= 10) {
     return {
       ...fixed,
-      headerBottomMargin: 12,
-      fromToBottomMargin: 12,
-      tablePaddingV: 5,
-      footerTopMargin: 50,
+      headerBottomMargin: 10,
+      fromToBottomMargin: 10,
+      tablePaddingV: 4.5,
+      footerTopMargin: 30,
       fromFontSize: 7.5,
       toFontSize: 7.5,
       partyNameSize: 9,
@@ -235,13 +284,13 @@ function getSpacing(itemCount) {
       totalBoxMarginTop: 1,
     };
   }
-  if (itemCount <= 13) {
+  if (effectiveCount <= 14) {
     return {
       ...fixed,
-      headerBottomMargin: 8,
-      fromToBottomMargin: 8,
-      tablePaddingV: 3.5,
-      footerTopMargin: 20,
+      headerBottomMargin: 6,
+      fromToBottomMargin: 6,
+      tablePaddingV: 3,
+      footerTopMargin: 15,
       fromFontSize: 7,
       toFontSize: 7,
       partyNameSize: 8.5,
@@ -269,7 +318,7 @@ function getSpacing(itemCount) {
 function invoicePdfDefinition(invoice, items = [], settings = {}) {
   const currency = settings.default_currency || 'SGD';
   const uenNumber = settings.uen || '201835067C';
-  const sp = getSpacing(items.length);
+  const sp = getSpacing(items);
 
   // Format invoice number defensively
   const rawInvoiceNo = String(invoice.invoice_no || '');
@@ -280,9 +329,9 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
   /* ---- Build item rows ---- */
   const itemRows = items.map((item, idx) => [
     { text: String(idx + 1), style: 'cell', alignment: 'center' },
-    { text: (item.productname || '').toUpperCase(), style: 'cell', alignment: 'left' },
-    { text: item.description || '', style: 'cell', alignment: 'left' },
-    { text: money(item.rate), style: 'cell', alignment: 'center' },
+    { text: formatCellText(item.productname || '').toUpperCase(), style: 'cell', alignment: 'left' },
+    { text: formatCellText(item.description || ''), style: 'cell', alignment: 'left' },
+    { text: money(item.rate), style: 'cell', alignment: 'right' },
     { text: String(Number(item.quantity || 0)), style: 'cell', alignment: 'center' },
     { text: money(item.total), style: 'cell', alignment: 'right' },
   ]);
@@ -379,7 +428,8 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
       {
         table: {
           headerRows: 1,
-          widths: [24, 145, '*', 70, 40, 80],
+          dontBreakRows: true,
+          widths: [20, 130, '*', 65, 35, 75],
           body: [
             [
               { text: '#', style: 'th', color: '#ffffff', bold: true, alignment: 'center' },

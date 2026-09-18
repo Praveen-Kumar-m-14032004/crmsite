@@ -846,6 +846,8 @@ table.datatable td .cell-strong { font-weight: 600; color: var(--ink); }
 .line-items-table tbody tr:last-child td { border-bottom: none; }
 .line-items-table input, .line-items-table select {
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   border: 1.5px solid rgba(109, 36, 117, 0.35);
   border-radius: var(--r-pill);
   padding: 8px 12px;

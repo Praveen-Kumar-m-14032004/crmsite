@@ -167,7 +167,24 @@ export default function ManageInvoice() {
       key: 'sub_amount', label: `Total (${currency})`, sortable: true, align: 'right',
       render: (r) => <span className="num cell-strong">{Number(r.sub_amount).toFixed(2)}</span>,
     },
-  
+    {
+      key: 'status', label: 'Status', sortable: true,
+      render: (r) => (
+        can('invoices.edit') ? (
+          <select
+            className={`status-select ${statusClass(r.status)}`}
+            value={r.status || 'Unpaid'}
+            onChange={(e) => handleStatusChange(r, e.target.value)}
+          >
+            {STATUS_OPTIONS.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        ) : (
+          <span className={`status-pill ${statusClass(r.status)}`}>{r.status || 'Unpaid'}</span>
+        )
+      ),
+    },
     {
       key: 'action', label: 'Action',
       render: (row) => (
@@ -194,7 +211,7 @@ export default function ManageInvoice() {
         </div>
       ),
     },
-  ], [printingId, currency, can, navigate, handlePrint]);
+  ], [printingId, currency, can, navigate, handlePrint, handleStatusChange]);
 
   // Memoized trash columns — only recalculates when restoringId or currency changes
   const trashColumns = useMemo(() => [

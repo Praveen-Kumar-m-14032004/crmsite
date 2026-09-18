@@ -29,6 +29,7 @@ export default function AddInvoice() {
   const [customerContact, setCustomerContact] = useState('');
   const [items, setItems] = useState(defaultItems());
   const [paidAmount, setPaidAmount] = useState('');
+  const [paymentType, setPaymentType] = useState(null);
   const [invoiceStatus, setInvoiceStatus] = useState('Unpaid');
   // Version of the record this form was loaded from, sent back on save so the
   // server can reject an edit that would clobber someone else's newer changes.
@@ -55,9 +56,10 @@ export default function AddInvoice() {
           setCustomerId(String(inv.customer_id));
           setCustomerContact(inv.customer_contact || '');
           setPaidAmount(String(inv.paid_amount ?? ''));
+          setPaymentType(inv.payment_type || null);
           setInvoiceStatus(inv.status && String(inv.status).toLowerCase() === 'pending' ? 'Unpaid' : (inv.status || 'Unpaid'));
           setLoadedVersion(inv.version ?? null);
-          setItems(inv.items.length ? inv.items.map((it) => ({
+          setItems(inv.items && inv.items.length ? inv.items.map((it) => ({
             product_id: String(it.product_id),
             description: it.description || '',
             rate: String(it.rate),
@@ -185,7 +187,7 @@ export default function AddInvoice() {
         customer_contact: customerContact,
         items: resolvedItems,
         paid_amount: paid,
-        payment_type: null,
+        payment_type: paymentType || null,
         payment_status: autoPaymentStatus,
         status: isEdit ? invoiceStatus : 'Unpaid',
         ...(isEdit && loadedVersion !== null ? { expected_version: loadedVersion } : {}),
@@ -268,6 +270,17 @@ export default function AddInvoice() {
               <label htmlFor="invdate">Invoice Date <span className="req">*</span></label>
               <input id="invdate" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} required />
             </div>
+            {/* 5. Status (only shown during edit) */}
+            {isEdit && (
+              <div className="form-field">
+                <label htmlFor="invstatus">Invoice Status</label>
+                <select id="invstatus" value={invoiceStatus} onChange={(e) => setInvoiceStatus(e.target.value)}>
+                  <option value="Unpaid">Unpaid</option>
+                  <option value="Paid">Paid</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+              </div>
+            )}
           </div>
         </div>
 

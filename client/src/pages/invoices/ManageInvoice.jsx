@@ -60,8 +60,17 @@ export default function ManageInvoice() {
 
   const table = useDataTable(fetcher, { defaultSort: 'invoice_date', defaultDir: 'desc' });
 
+  const isFirstMount = useRef(true);
   useEffect(() => {
     const tab = location.pathname.includes('/trash') ? 'trash' : 'active';
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      if (tab !== activeTab) {
+        setActiveTab(tab);
+        activeTabRef.current = tab;
+      }
+      return;
+    }
     setActiveTab(tab);
     activeTabRef.current = tab;
     table.setPage(1);
@@ -96,7 +105,7 @@ export default function ManageInvoice() {
         toast.success(`Invoice #${toDelete.invoice_no} permanently deleted`);
       } else {
         await invoicesApi.remove(toDelete.id);
-        toast.success(`Invoice #${toDelete.invoice_no} moved to trash (auto-deletes in 10 days)`);
+        toast.success(`Invoice #${toDelete.invoice_no} moved to trash`);
       }
       setToDelete(null);
       table.reload();

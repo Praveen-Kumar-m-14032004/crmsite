@@ -76,7 +76,21 @@ async function seedDefaults(overrideUsername, overridePassword) {
 
   await db.collection('company_settings').updateOne(
     { _id: 'company_settings' },
-    { $setOnInsert: { id: 1, company_name: 'Chola Logistics Pte Ltd', uen: '201835067C', default_currency: 'SGD', created_at: now() } },
+    {
+      $set: {
+        company_name: 'Chola Logistics Pte Ltd',
+        address: 'Blk-640, Rowell Road, #01-54, Singapore 200640',
+        tel: '+65 62917747',
+        mobile: '+65 90144400',
+        email: 'accounts@permitdeclaration.com.sg',
+        website: 'www.permitdeclaration.com.sg',
+        contact_no: '+65 96539713',
+        uen: '201835067C',
+        default_currency: 'SGD',
+        updated_at: now(),
+      },
+      $setOnInsert: { id: 1, created_at: now() },
+    },
     { upsert: true }
   );
 

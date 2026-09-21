@@ -54,17 +54,17 @@ export default function AddInvoice() {
           const inv = last.data;
           setInvoiceNo(inv.invoice_no);
           setInvoiceDate(toDateInputValue(inv.invoice_date));
-          setCustomerId(String(inv.customer_id));
+          setCustomerId(inv.customer_id ? String(inv.customer_id) : (inv.companyname || ''));
           setCustomerContact(inv.customer_contact || '');
           setPaidAmount(String(inv.paid_amount ?? ''));
           setPaymentType(inv.payment_type || null);
           setInvoiceStatus(inv.status && String(inv.status).toLowerCase() === 'pending' ? 'Unpaid' : (inv.status || 'Unpaid'));
-          setLoadedVersion(inv.version ?? null);
+          setLoadedVersion(inv.version !== undefined && inv.version !== null ? Number(inv.version) : 0);
           setItems(inv.items && inv.items.length ? inv.items.map((it) => ({
-            product_id: it.product_id ? String(it.product_id) : (it.productname || ''),
+            product_id: (it.product_id !== undefined && it.product_id !== null && it.product_id !== 0) ? String(it.product_id) : (it.productname || ''),
             description: it.description ?? '',
-            rate: String(it.rate),
-            quantity: String(Number(it.quantity)),
+            rate: it.rate !== undefined && it.rate !== null ? String(it.rate) : '',
+            quantity: it.quantity ? String(Number(it.quantity)) : '1',
           })) : defaultItems());
         } else {
           setInvoiceNo(last.data.invoice_no);
@@ -130,15 +130,15 @@ export default function AddInvoice() {
     e.preventDefault();
     setError('');
 
-    const activeItems = items.filter((it) => it.product_id || it.description?.trim() || it.rate !== '');
+    const activeItems = items.filter((it) => (it.product_id && String(it.product_id).trim()) || (it.description && it.description.trim()) || (it.rate !== '' && it.rate !== null && it.rate !== undefined));
     const itemsToSave = activeItems.length ? activeItems : items;
 
     if (!invoiceNo.trim()) { setError('Invoice number is required.'); return; }
     if (!invoiceDate) { setError('Invoice date is required.'); return; }
     if (!customerId || !String(customerId).trim()) { setError('Please enter or select a company/customer.'); return; }
     if (!activeItems.length) { setError('Please add at least one line item.'); return; }
-    if (itemsToSave.some((it) => !it.product_id)) { setError('Every line item needs a product selected.'); return; }
-    if (itemsToSave.some((it) => it.rate === '' || Number(it.rate) < 0)) { setError('Every line item needs a valid rate.'); return; }
+    if (itemsToSave.some((it) => !it.product_id || !String(it.product_id).trim())) { setError('Every line item needs a product selected.'); return; }
+    if (itemsToSave.some((it) => it.rate === '' || it.rate === null || isNaN(Number(it.rate)) || Number(it.rate) < 0)) { setError('Every line item needs a valid rate.'); return; }
     if (itemsToSave.some((it) => !Number(it.quantity) || Number(it.quantity) <= 0)) { setError('Quantity must be greater than zero.'); return; }
     if (paid > subAmount) { setError('Paid amount cannot be more than the sub amount.'); return; }
 
@@ -200,13 +200,11 @@ export default function AddInvoice() {
 
       if (isEdit) {
         await invoicesApi.update(id, payload);
-        invalidatePdfCache(`/invoices/${id}/print`);
+        invalidatePdfCache();
         toast.success(`Invoice #${payload.invoice_no} updated`);
       } else {
         const createRes = await invoicesApi.create(payload);
-        if (createRes.data?.id) {
-          invalidatePdfCache(`/invoices/${createRes.data.id}/print`);
-        }
+        invalidatePdfCache();
         toast.success(`Invoice #${payload.invoice_no} created`);
       }
       navigate('/invoices');

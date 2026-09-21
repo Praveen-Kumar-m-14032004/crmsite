@@ -1,4 +1,5 @@
 const { collection, nextId, now } = require('../utils/mongo');
+const { invalidate } = require('../utils/cache');
 
 async function getSettings(_req, res) {
   res.json(await collection('company_settings').findOne({}) || {});
@@ -15,6 +16,8 @@ async function updateSettings(req, res) {
   const existing = await collection('company_settings').findOne({});
   if (existing) await collection('company_settings').updateOne({ _id: existing._id }, { $set: settings });
   else await collection('company_settings').insertOne({ id: await nextId('company_settings'), ...settings });
+  invalidate('invoice:');
+  invalidate('dashboard:');
   res.json(await collection('company_settings').findOne({}));
 }
 

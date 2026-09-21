@@ -15,7 +15,7 @@ async function summary(_req, res) {
       collection('invoices').aggregate([
         { $match: notDeleted },
         { $lookup: { from: 'customers', localField: 'customer_id', foreignField: 'id', as: 'customer' } },
-        { $unwind: '$customer' },
+        { $unwind: { path: '$customer', preserveNullAndEmptyArrays: true } },
         { $sort: { invoice_date: -1, id: -1 } },
         { $limit: 6 },
         { $project: { id: 1, invoice_no: 1, invoice_date: 1, sub_amount: 1, due_amount: 1, payment_status: 1, status: 1, companyname: '$customer.companyname' } },

@@ -28,7 +28,7 @@ async function runQuery(filters, limit) {
   const pipeline = [
     { $match: match },
     { $lookup: { from: 'customers', localField: 'customer_id', foreignField: 'id', as: 'customer' } },
-    { $unwind: '$customer' },
+    { $unwind: { path: '$customer', preserveNullAndEmptyArrays: true } },
   ];
 
   if (company && String(company).trim() && company !== 'All') {

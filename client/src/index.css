@@ -1008,36 +1008,36 @@ select:focus {
 }
 
 .entries-select {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
   font-size: 13.5px;
-  color: var(--ink-2);
+  color: var(--muted);
   font-weight: 500;
   user-select: none;
 }
 
 .entries-select select {
-  border: 1.5px solid rgba(109, 36, 117, 0.28);
-  border-radius: var(--r-md);
-  padding: 6px 28px 6px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 6px 30px 6px 12px;
   font-family: inherit;
   font-size: 13.5px;
   font-weight: 600;
-  color: #6d2475;
+  color: var(--ink);
   background-color: #ffffff;
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
-  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236d2475' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%236b7280'%3e%3cpath fill-rule='evenodd' d='M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' clip-rule='evenodd'/%3e");
   background-repeat: no-repeat;
-  background-position: right 9px center;
-  background-size: 12px;
+  background-position: right 8px center;
+  background-size: 16px;
   cursor: pointer;
-  box-shadow: 0 1px 3px rgba(109, 36, 117, 0.08);
-  transition: border-color 0.18s var(--ease), box-shadow 0.18s var(--ease), background-color 0.18s var(--ease);
-  min-width: 68px;
-  height: 38px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all 0.15s ease-in-out;
+  min-width: 66px;
+  height: 36px;
   line-height: normal;
 }
 
@@ -1049,15 +1049,14 @@ select:focus {
 }
 
 .entries-select select:hover {
-  border-color: #6d2475;
-  background-color: var(--purple-50);
-  box-shadow: 0 2px 8px rgba(109, 36, 117, 0.15);
+  border-color: #9ca3af;
+  background-color: #f9fafb;
 }
 
 .entries-select select:focus {
   outline: none;
   border-color: #6d2475;
-  box-shadow: 0 0 0 3.5px rgba(109, 36, 117, 0.16);
+  box-shadow: 0 0 0 3px rgba(109, 36, 117, 0.15);
 }
 
 .search-box {

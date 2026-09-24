@@ -170,11 +170,16 @@ export default function ManageQuotation() {
           </Link>
         )}
       </div>
-
-      <DataTable
-        table={table}
-        columns={columns}
-      />
+      <div className="card">
+        <DataTable
+          columns={columns}
+          {...table}
+          onSort={table.toggleSort}
+          searchPlaceholder="Search quotation no, company, contact…"
+          emptyTitle="No quotations yet"
+          emptyMessage="Create your first quotation and it will appear here."
+        />
+      </div>
 
       {toDelete && (
         <ConfirmDialog

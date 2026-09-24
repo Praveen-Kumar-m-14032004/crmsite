@@ -20,6 +20,15 @@ const DEFAULT_TURNAROUNDS = [
 
 const SORTABLE = ['quotation_no', 'companyname', 'mobile_no', 'quotation_date', 'created_at', 'id'];
 
+function findFilter(param) {
+  if (!param) return { id: -1 };
+  const num = numericId(param);
+  if (num) {
+    return { $or: [{ id: num }, { quotation_no: String(param) }] };
+  }
+  return { quotation_no: String(param) };
+}
+
 async function list(req, res) {
   const { search = '', page = 1, limit = 10, sort = 'id', dir = 'desc' } = req.query;
 
@@ -51,7 +60,7 @@ async function list(req, res) {
 }
 
 async function getOne(req, res) {
-  const quotation = await collection('quotations').findOne({ id: numericId(req.params.id) });
+  const quotation = await collection('quotations').findOne(findFilter(req.params.id));
   if (!quotation) return res.status(404).json({ message: 'Quotation not found' });
   res.json(quotation);
 }
@@ -183,7 +192,7 @@ async function update(req, res) {
   if (contact_numbers) updateFields.contact_numbers = contact_numbers;
 
   const result = await collection('quotations').findOneAndUpdate(
-    { id },
+    findFilter(req.params.id),
     { $set: updateFields },
     { returnDocument: 'after' }
   );
@@ -194,20 +203,16 @@ async function update(req, res) {
 }
 
 async function remove(req, res) {
-  const id = numericId(req.params.id);
-  if (!id) return res.status(400).json({ message: 'Invalid quotation ID' });
-
-  const result = await collection('quotations').deleteOne({ id });
+  const filter = findFilter(req.params.id);
+  const result = await collection('quotations').deleteOne(filter);
   if (!result.deletedCount) return res.status(404).json({ message: 'Quotation not found' });
   res.json({ success: true, message: 'Quotation deleted successfully' });
 }
 
 async function getPdf(req, res) {
-  const id = numericId(req.params.id);
-  if (!id) return res.status(400).json({ message: 'Invalid quotation ID' });
-
+  const filter = findFilter(req.params.id);
   const [quotation, company] = await Promise.all([
-    collection('quotations').findOne({ id }),
+    collection('quotations').findOne(filter),
     collection('company_settings').findOne({}),
   ]);
 

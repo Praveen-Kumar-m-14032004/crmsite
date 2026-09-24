@@ -30,7 +30,20 @@ export function AuthProvider({ children }) {
   }, []);
 
   const hasPermission = useCallback(
-    (code) => Boolean(user?.permissions?.includes(code)),
+    (...codes) => {
+      const perms = user?.permissions || [];
+      const flat = codes.flat(Infinity);
+      if (!flat.length) return true;
+      return flat.some((c) => {
+        if (!c) return true;
+        if (perms.includes(c)) return true;
+        if (typeof c === 'string' && c.startsWith('quotations.')) {
+          const fallback = c.replace('quotations.', 'invoices.');
+          if (perms.includes(fallback)) return true;
+        }
+        return false;
+      });
+    },
     [user]
   );
 

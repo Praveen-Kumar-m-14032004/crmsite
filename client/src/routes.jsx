@@ -42,8 +42,10 @@ export default function AppRoutes() {
         <Route path="/estimates" element={<PermissionRoute permission={['quotations.view', 'invoices.view']}><ManageQuotation /></PermissionRoute>} />
         <Route path="/estimates/add" element={<PermissionRoute permission={['quotations.create', 'invoices.create']}><AddQuotation /></PermissionRoute>} />
         <Route path="/estimates/:id" element={<PermissionRoute permission={['quotations.view', 'invoices.view']}><QuotationView /></PermissionRoute>} />
+        <Route path="/estimates/view/:id" element={<PermissionRoute permission={['quotations.view', 'invoices.view']}><QuotationView /></PermissionRoute>} />
         <Route path="/estimates/:id/edit" element={<PermissionRoute permission={['quotations.edit', 'invoices.edit']}><AddQuotation /></PermissionRoute>} />
         <Route path="/quotations" element={<Navigate to="/estimates" replace />} />
+        <Route path="/quotation" element={<Navigate to="/estimates" replace />} />
 
         <Route path="/reports" element={<PermissionRoute permission="reports.view"><Reports /></PermissionRoute>} />
 

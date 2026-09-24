@@ -644,194 +644,157 @@ function reportPdfDefinition(rows, filters, summary) {
 
 function quotationPdfDefinition(quotation = {}, settings = {}) {
   const currency = settings.default_currency || 'SGD';
-  const uenNumber = settings.uen || '';
   const rawItems = Array.isArray(quotation.items) ? quotation.items : [];
-  const sp = getSpacing(rawItems);
 
-  const rawQuoteNo = String(quotation.quotation_no || '');
-  const formattedQuoteNo = rawQuoteNo.startsWith('#')
-    ? `Quotation ${rawQuoteNo}`
-    : `Quotation #${rawQuoteNo}`;
-
-  const itemRows = rawItems.map((item, idx) => [
-    { text: String(idx + 1), style: 'cell', alignment: 'center' },
-    { text: formatCellText(item.productname || item.type || '').toUpperCase(), style: 'cell', alignment: 'left' },
-    { text: formatCellText(item.description || ''), style: 'cell', alignment: 'left' },
-    { text: money(item.rate), style: 'cell', alignment: 'left' },
-    { text: String(Number(item.quantity || 1)), style: 'cell', alignment: 'center' },
-    { text: money(item.total || (Number(item.rate || 0) * Number(item.quantity || 1))), style: 'cell', alignment: 'right' },
+  /* Build the two-column PERMIT TYPES table rows */
+  const permitTableRows = rawItems.map((item) => [
+    { text: (item.productname || item.type || '\u2014').toUpperCase(), style: 'cell', alignment: 'left' },
+    { text: `${money(item.rate || item.total || 0)} ${currency}`, style: 'cell', alignment: 'center' },
   ]);
 
-  const fromLines = [
-    { text: settings.company_name || 'Permit Declaration', style: 'partyName' },
-  ];
-  if (settings.address) {
-    fromLines.push({ text: settings.address, style: 'partyLine' });
-  }
-  const telLine = [
-    settings.tel ? `Tel: ${settings.tel}` : null,
-    settings.mobile ? `HP: ${settings.mobile}` : null,
-  ].filter(Boolean).join(' | ');
-  if (telLine) fromLines.push({ text: telLine, style: 'partyLine' });
-  if (settings.email) fromLines.push({ text: `Email: ${settings.email}`, style: 'partyLine' });
-  if (settings.website) fromLines.push({ text: settings.website, style: 'partyLine' });
-  if (settings.contact_no) fromLines.push({ text: `Contact: ${settings.contact_no}`, style: 'partyLine' });
-
-  const subTotal = Number(quotation.sub_amount || rawItems.reduce((sum, it) => sum + (Number(it.total) || (Number(it.rate || 0) * Number(it.quantity || 1))), 0));
+  const companyName = settings.company_name || 'Permit Declaration';
+  const contactPhone = settings.mobile || settings.tel || settings.contact_no || '';
+  const emailAddr = settings.email || 'Ops@permitdeclaration.sg';
 
   return {
     pageSize: 'A4',
-    pageMargins: [40, 35, 40, 45],
-    background: (_currentPage, pageSize) => {
-      if (logoBase64) {
-        return [
-          {
-            image: logoBase64,
-            width: 320,
-            opacity: 0.07,
-            absolutePosition: {
-              x: (pageSize.width - 320) / 2,
-              y: 290,
-            },
-          },
-        ];
-      }
-      return null;
-    },
-    footer: () => ({
-      text: 'This is a system generated quotation no signature needed.',
-      style: 'systemNotice',
-      alignment: 'center',
-      margin: [0, 15, 0, 0],
-    }),
+    pageMargins: [40, 35, 40, 30],
     content: [
-      /* Header: Logo left, Quotation details right */
+      /* HEADER: Logo left, Date + Quotation No right */
       {
         columns: [
+          { width: 340, stack: [logoBlock()] },
           {
-            width: 360,
-            stack: [logoBlock()],
-          },
-          {
-            width: 155,
+            width: '*',
             stack: [
-              ...(uenNumber ? [{ text: `UEN: ${uenNumber}`, style: 'dateLine', alignment: 'right' }] : []),
-              { text: `Date: ${formatDate(quotation.quotation_date || quotation.created_at)}`, style: 'dateLine', alignment: 'right' },
-              { text: formattedQuoteNo, style: 'invoiceNo', alignment: 'right' },
+              { text: `DATE : ${formatDate(quotation.quotation_date || quotation.created_at)}`, style: 'dateLabel', alignment: 'right' },
+              { text: `Quotation No : ${quotation.quotation_no || ''}`, style: 'dateLabel', alignment: 'right', margin: [0, 2, 0, 0] },
             ],
           },
         ],
-        margin: [0, 0, 0, sp.headerBottomMargin],
+        margin: [0, 0, 0, 20],
       },
 
-      /* From & To Section */
+      /* CUSTOMER INFO */
+      { text: (quotation.companyname || '').toUpperCase(), bold: true, fontSize: 11, margin: [0, 0, 0, 3] },
+      ...(quotation.address ? [{ text: `Address : ${quotation.address}`, fontSize: 9.5, margin: [0, 0, 0, 6] }] : []),
       {
         columns: [
-          {
-            width: 295,
-            stack: [
-              { text: 'From:', style: 'partyLabel' },
-              ...fromLines,
-            ],
-          },
-          {
-            width: 220,
-            stack: [
-              { text: `To: ${quotation.companyname || ''}`, style: 'partyLabel' },
-              ...(quotation.person_incharge ? [{ text: `Attn: ${quotation.person_incharge}`, style: 'partyName', margin: [0, 4, 0, 2] }] : []),
-              ...(quotation.address ? [{ text: `Address: ${quotation.address}`, style: 'partyLine' }] : []),
-              ...(quotation.customer_contact || quotation.mobile_no ? [{ text: `Phone: ${quotation.customer_contact || quotation.mobile_no}`, style: 'partyLine' }] : []),
-            ],
-          },
+          { width: 120, text: 'Person Incharge', bold: true, fontSize: 9.5 },
+          { width: '*', text: `: ${quotation.person_incharge || 'Person In-Charge'}`, fontSize: 9.5 },
         ],
-        margin: [0, 0, 0, sp.fromToBottomMargin],
+        margin: [0, 0, 0, 1],
+      },
+      {
+        columns: [
+          { width: 120, text: 'Tele', bold: true, fontSize: 9.5 },
+          { width: '*', text: `: ${quotation.customer_contact || quotation.mobile_no || '\u2014'}`, fontSize: 9.5 },
+        ],
+        margin: [0, 0, 0, 14],
       },
 
-      /* Items Table with Purple Header */
+      /* OFFICIAL QUOTATION TITLE */
+      { text: 'OFFICIAL QUOTATION FOR PERMIT DECLARATIONS', bold: true, fontSize: 12, alignment: 'center', margin: [0, 0, 0, 10] },
+
+      /* PERMIT TYPES TABLE */
       {
         table: {
           headerRows: 1,
-          dontBreakRows: true,
-          widths: [20, 130, '*', 65, 35, 75],
+          widths: ['60%', '40%'],
           body: [
             [
-              { text: '#', style: 'th', color: '#ffffff', bold: true, alignment: 'center' },
-              { text: 'Product Name', style: 'th', color: '#ffffff', bold: true, alignment: 'left' },
-              { text: 'Description', style: 'th', color: '#ffffff', bold: true, alignment: 'left' },
-              { text: `Unit Cost ${currency}`, style: 'th', color: '#ffffff', bold: true, alignment: 'left' },
-              { text: 'Qty', style: 'th', color: '#ffffff', bold: true, alignment: 'center' },
-              { text: `Total ${currency}`, style: 'th', color: '#ffffff', bold: true, alignment: 'right' },
+              { text: 'PERMIT TYPES', bold: true, alignment: 'center', fontSize: 9.5, margin: [0, 2, 0, 2] },
+              { text: 'PERMIT CHARGES', bold: true, alignment: 'center', fontSize: 9.5, margin: [0, 2, 0, 2] },
             ],
-            ...(itemRows.length > 0 ? itemRows : [[
-              { text: '1', style: 'cell', alignment: 'center' },
-              { text: '—', style: 'cell', alignment: 'left' },
-              { text: '—', style: 'cell', alignment: 'left' },
-              { text: '0.00', style: 'cell', alignment: 'left' },
-              { text: '1', style: 'cell', alignment: 'center' },
-              { text: '0.00', style: 'cell', alignment: 'right' },
+            ...(permitTableRows.length > 0 ? permitTableRows : [[
+              { text: '\u2014', style: 'cell', alignment: 'left' },
+              { text: '0.00 ' + currency, style: 'cell', alignment: 'center' },
             ]]),
           ],
         },
         layout: {
-          fillColor: (rowIndex) => (rowIndex === 0 ? PURPLE : null),
-          hLineWidth: () => 0.5,
-          vLineWidth: () => 0.5,
-          hLineColor: () => '#e5e7eb',
-          vLineColor: () => '#e5e7eb',
-          paddingLeft: () => 6,
-          paddingRight: () => 6,
-          paddingTop: () => sp.tablePaddingV,
-          paddingBottom: () => sp.tablePaddingV,
+          hLineWidth: () => 0.75, vLineWidth: () => 0.75,
+          hLineColor: () => '#333333', vLineColor: () => '#333333',
+          paddingTop: () => 5, paddingBottom: () => 5, paddingLeft: () => 8, paddingRight: () => 8,
+        },
+        margin: [0, 0, 0, 12],
+      },
+
+      /* ITEM COST */
+      { text: 'Item Cost :', bold: true, fontSize: 9.5, margin: [0, 0, 0, 4] },
+      { text: [{ text: '1st to 10th items ' }, { text: 'No Charges', bold: true }], fontSize: 9, margin: [0, 0, 0, 4] },
+      { text: [{ text: 'From 11th items onwards additional charge ' }, { text: `${currency} 0.50 Cents per line item`, bold: true }], fontSize: 9, margin: [0, 0, 0, 14] },
+
+      /* PERMIT TURN-AROUND TIME */
+      { text: '(PERMIT TURN-AROUND TIME)', bold: true, fontSize: 10.5, alignment: 'center', margin: [0, 6, 0, 8] },
+      {
+        table: {
+          headerRows: 1,
+          widths: ['55%', '45%'],
+          body: [
+            [
+              { text: 'Priority :', bold: true, alignment: 'center', fontSize: 9.5, margin: [0, 2, 0, 2] },
+              { text: 'Permit Returning Timings :', bold: true, alignment: 'center', fontSize: 9.5, margin: [0, 2, 0, 2] },
+            ],
+            [{ text: 'Normal Requests', fontSize: 9 }, { text: 'Within 2hrs from time of Request', fontSize: 9, alignment: 'center' }],
+            [{ text: 'Urgent Requests', fontSize: 9 }, { text: 'Within 60mins of Request', fontSize: 9, alignment: 'center' }],
+            [{ text: 'Super Urgent Requests', fontSize: 9 }, { text: 'Within 30 mins of Request', fontSize: 9, alignment: 'center' }],
+            [{ text: 'Tier1/Control countries/Other Controlling Agencies', fontSize: 9 }, { text: 'Depending upon the Customs queue', fontSize: 9, alignment: 'center' }],
+          ],
+        },
+        layout: {
+          hLineWidth: () => 0.75, vLineWidth: () => 0.75,
+          hLineColor: () => '#333333', vLineColor: () => '#333333',
+          paddingTop: () => 5, paddingBottom: () => 5, paddingLeft: () => 8, paddingRight: () => 8,
         },
         margin: [0, 0, 0, 14],
       },
 
-      /* Total Box */
+      /* PROCEDURES */
+      { text: 'Procedures :', bold: true, fontSize: 9.5, margin: [0, 0, 0, 4] },
+      { text: 'To facilitate the customs permit application, kindly provide the following documents:', fontSize: 9, margin: [0, 0, 0, 3] },
+      { text: '  .  BL COPY / AWB COPY / Commercial Invoice / Packing List / NOA / BKG Form', fontSize: 9, margin: [0, 0, 0, 3] },
       {
-        columns: [
-          {
-            width: '*',
-            stack: quotation.notes ? [
-              { text: 'Notes / Terms:', style: 'partyLabel' },
-              { text: quotation.notes, style: 'partyLine', margin: [0, 2, 0, 0] },
-            ] : [],
-          },
-          {
-            width: 190,
-            table: {
-              widths: ['*'],
-              body: [
-                [
-                  {
-                    stack: [
-                      {
-                        columns: [
-                          { text: 'Total Amount:', style: 'totalLabel' },
-                          { text: `${currency} ${money(subTotal)}`, style: 'totalValue', alignment: 'right' },
-                        ],
-                      },
-                    ],
-                    fillColor: '#f9fafb',
-                    margin: [8, 6, 8, 6],
-                  },
-                ],
-              ],
-            },
-            layout: 'noBorders',
-          },
+        text: [
+          { text: 'Send Your Permit Request To Our Ops Team : ' },
+          { text: `Email: ${emailAddr}`, bold: true },
+          { text: ' | CC: ' },
+          { text: 'Customspermit.sg@gmail.com', bold: true },
         ],
-        margin: [0, 6, 0, sp.footerTopMargin || 40],
+        fontSize: 9, margin: [0, 0, 0, 3],
       },
+      { text: 'Upon receipt of the required documents, our ops team will process your permit application promptly. Approved permit(s) will be forwarded to your email upon successful approval by Singapore Customs.', fontSize: 9, margin: [0, 0, 0, 10] },
 
-      /* Authorized Signature block */
+      /* OPERATING HOURS */
+      { text: 'Operating Hours :', bold: true, fontSize: 9.5, margin: [0, 0, 0, 4] },
+      { text: [{ text: '24 Hours | 7 Days a Week | Including Public Holidays at ' }, { text: 'NO EXTRA COST', bold: true }], fontSize: 9, margin: [0, 0, 0, 3] },
+      { text: 'We provide 24/7 Customs Permit Declaration Services to support your import and export operations at any time.', fontSize: 9, margin: [0, 0, 0, 3] },
+      { text: `24/7 Assistance WhatsApp / Contact: ${contactPhone}`, bold: true, fontSize: 9, margin: [0, 0, 0, 3] },
+      { text: `Express Permit Processing : Additional ${currency} 10.00 per permit.`, bold: true, fontSize: 9, margin: [0, 0, 0, 10] },
+
+      /* TERMS & CONDITIONS */
+      { text: 'Terms & Conditions :', bold: true, fontSize: 9.5, margin: [0, 0, 0, 4] },
+      { text: '  .  Payment for Declaration services shall be made within 7 days from the invoice date.', fontSize: 9, margin: [0, 0, 0, 2] },
+      { text: "  .  Under our GIRO arrangement with Singapore Customs, all applicable GST, Customs Duties, and Government charges are deducted directly from our company's GIRO account.", fontSize: 9, margin: [0, 0, 0, 2] },
+      { text: "  .  Customers are required to transfer the applicable GST and DUTY charges to our company's designated UOB bank account before permit submission and approval.", fontSize: 9, margin: [0, 0, 0, 2] },
+      { text: '  .  Permit application will be processed for approval only after the GST payment has been received.', fontSize: 9, margin: [0, 0, 0, 2] },
+      { text: '  .  Additional charges may apply for permit amendments, cancellations, controlled goods, licence applications, or other special customs requirements.', fontSize: 9, margin: [0, 0, 0, 2] },
+      { text: '  .  Unless otherwise stated, this quotation is valid for 10 days from the date of issue.', fontSize: 9, margin: [0, 0, 0, 4] },
+      { text: `Thank you for choosing ${companyName} Permit Declaration Services. We look forward to serving you with fast, reliable, and professional support 24/7.`, fontSize: 9, margin: [0, 0, 0, 16] },
+
+      /* SIGN-OFF */
+      { text: 'THANKS & BEST REGARDS', bold: true, fontSize: 10.5, color: '#1b2a4a', alignment: 'right', margin: [0, 0, 0, 1] },
+      { text: 'GANI - CEO', bold: true, fontSize: 10.5, color: '#1b2a4a', alignment: 'right', margin: [0, 0, 0, 30] },
+
+      /* SIGNATURE LINE */
       {
         columns: [
           { width: '*', text: '' },
           {
-            width: 200,
+            width: 220,
             stack: [
-              { text: '.......................................................', color: '#999999', alignment: 'right' },
-              { text: '(AUTHORISED SIGNATURE)', bold: true, fontSize: 8, alignment: 'right', margin: [0, 4, 0, 0] },
+              { text: '.......................................................', color: '#666666', alignment: 'center' },
+              { text: '(AUTHORISED SIGNATURE)', bold: true, fontSize: 9, alignment: 'center', margin: [0, 4, 0, 0] },
             ],
           },
         ],
@@ -839,18 +802,18 @@ function quotationPdfDefinition(quotation = {}, settings = {}) {
     ],
     styles: {
       wordmark: { fontSize: 13, bold: true, color: PURPLE, lineHeight: 1 },
-      invoiceNo: { fontSize: 13, bold: true, color: PURPLE },
-      dateLine: { fontSize: 9, color: INK },
+      dateLabel: { fontSize: 10, bold: true, color: '#1b2a4a' },
+      invoiceNo: { fontSize: 12, bold: true, color: '#1b2a4a' },
       partyLabel: { fontSize: 9, bold: true, color: PURPLE },
-      partyName: { fontSize: 9.5, bold: true, color: INK },
-      partyLine: { fontSize: 8.5, color: INK },
-      th: { fontSize: 8.5, color: '#ffffff', bold: true },
-      cell: { fontSize: 8.5, color: INK },
-      totalLabel: { fontSize: 9.5, bold: true, color: INK },
+      partyName: { fontSize: 10, bold: true, color: INK },
+      partyLine: { fontSize: 9, color: INK },
+      th: { fontSize: 9, color: '#ffffff', bold: true },
+      cell: { fontSize: 9, color: INK },
+      totalLabel: { fontSize: 10, bold: true, color: INK },
       totalValue: { fontSize: 11, bold: true, color: PURPLE },
       systemNotice: { fontSize: 9, bold: true, color: MUTED, italics: true },
     },
-    defaultStyle: { font: 'Lato', fontSize: 8.5, color: INK },
+    defaultStyle: { font: 'Lato', fontSize: 9, color: INK },
   };
 }
 

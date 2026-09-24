@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { quotationsApi, settingsApi } from '../../api/endpoints';
 import { openViaApi } from '../../api/download';
 import { errorMessage, useToast } from '../../hooks/ToastContext';
@@ -9,7 +9,6 @@ import { formatDateDMY } from '../../utils/date';
 
 export default function QuotationView() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const toast = useToast();
 
   const [quotation, setQuotation] = useState(null);
@@ -76,27 +75,20 @@ export default function QuotationView() {
 
   const currency = company.default_currency || 'SGD';
   const items = Array.isArray(quotation.items) ? quotation.items : [];
-  const subTotal = Number(
-    quotation.sub_amount ||
-    items.reduce((sum, it) => sum + (Number(it.total) || (Number(it.rate || 0) * Number(it.quantity || 1))), 0)
-  );
-
-  const telLine = [
-    company.tel ? `Tel: ${company.tel}` : null,
-    company.mobile ? `HP: ${company.mobile}` : null,
-  ].filter(Boolean).join(' | ');
+  const companyName = company.company_name || 'Permit Declaration';
 
   return (
     <div style={{ paddingBottom: 60 }}>
-      {/* Top Action Bar */}
+      {/* ── Download as PDF button (top-right, floating) ── */}
       <div
         className="no-print"
         style={{
           display: 'flex',
-          justifyContent: 'space-between',
+          justifyContent: 'flex-end',
           alignItems: 'center',
           maxWidth: 860,
-          margin: '0 auto 20px',
+          margin: '0 auto 12px',
+          gap: 10,
         }}
       >
         <Link
@@ -106,280 +98,358 @@ export default function QuotationView() {
             textDecoration: 'none',
             fontSize: 14,
             fontWeight: 500,
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
+            marginRight: 'auto',
           }}
         >
           ← Back to list
         </Link>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Link
-            to={`/estimates/${quotation.id}/edit`}
-            className="btn btn-secondary"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '8px 16px',
-              fontSize: 13,
-            }}
-          >
-            <EditIcon size={14} />
-            Edit
-          </Link>
+        <Link
+          to={`/estimates/${quotation.id}/edit`}
+          className="btn btn-secondary"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13 }}
+        >
+          <EditIcon size={14} />
+          Edit
+        </Link>
 
-          <button
-            type="button"
-            onClick={handlePrint}
-            className="btn btn-secondary"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '8px 16px',
-              fontSize: 13,
-            }}
-          >
-            <PrinterIcon size={14} />
-            Print
-          </button>
+        <button
+          type="button"
+          onClick={handlePrint}
+          className="btn btn-secondary"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13 }}
+        >
+          <PrinterIcon size={14} />
+          Print
+        </button>
 
-          <button
-            type="button"
-            onClick={handleDownloadPdf}
-            className="btn btn-primary"
-            disabled={downloading}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '8px 18px',
-              fontSize: 13,
-              fontWeight: 600,
-            }}
-          >
-            {downloading ? <SpinnerIcon size={15} /> : <DownloadIcon size={15} />}
-            Download PDF
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={handleDownloadPdf}
+          className="btn btn-primary"
+          disabled={downloading}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '10px 22px',
+            fontSize: 13,
+            fontWeight: 700,
+            background: '#1b2a4a',
+            color: '#ffffff',
+            border: 'none',
+            borderRadius: 6,
+            cursor: 'pointer',
+          }}
+        >
+          {downloading ? <SpinnerIcon size={15} /> : <DownloadIcon size={15} />}
+          Download as PDF
+        </button>
       </div>
 
-      {/* Official Quotation Document Sheet Matching Website Design */}
+      {/* ── Official Quotation Document Sheet ── */}
       <div
-        className="quotation-document-sheet card"
+        className="quotation-document-sheet"
         style={{
           maxWidth: 860,
           margin: '0 auto',
           background: '#ffffff',
-          color: 'var(--ink)',
-          padding: '48px 52px',
-          boxShadow: '0 8px 30px rgba(0, 0, 0, 0.06)',
-          borderRadius: 12,
-          fontFamily: 'inherit',
-          fontSize: 13.5,
-          lineHeight: 1.5,
+          color: '#1a1a1a',
+          padding: '48px 56px 56px',
+          boxShadow: '0 4px 24px rgba(0,0,0,0.1)',
+          borderRadius: 2,
+          fontFamily: "'Times New Roman', 'Georgia', serif",
+          fontSize: 14,
+          lineHeight: 1.65,
         }}
       >
-        {/* Header: Logo & Company UEN / Quote Info */}
+        {/* ── HEADER: Logo left | Date & Quotation No right ── */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
           <div>
             <img
               src={logoImg}
-              alt={company.company_name || 'Permit Declaration'}
-              style={{
-                width: 170,
-                height: 'auto',
-                display: 'block',
-              }}
+              alt={companyName}
+              style={{ width: 180, height: 'auto', display: 'block' }}
             />
           </div>
           <div style={{ textAlign: 'right' }}>
-            {company.uen && (
-              <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 2 }}>
-                UEN: <strong style={{ color: 'var(--ink)' }}>{company.uen}</strong>
-              </div>
-            )}
-            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 4 }}>
-              Date: <strong style={{ color: 'var(--ink)' }}>{formatDateDMY(quotation.quotation_date || quotation.created_at)}</strong>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#1b2a4a' }}>
+              DATE : {formatDateDMY(quotation.quotation_date || quotation.created_at)}
             </div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--purple-brand)', letterSpacing: '0.02em' }}>
-              Quotation #{quotation.quotation_no}
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#1b2a4a', marginTop: 2 }}>
+              Quotation No : {quotation.quotation_no}
             </div>
           </div>
         </div>
 
-        {/* From & To Section */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1.2fr 1fr',
-            gap: 28,
-            marginBottom: 30,
-            paddingTop: 16,
-            borderTop: '1px solid var(--line)',
-          }}
-        >
-          {/* From */}
-          <div>
-            <div style={{ fontWeight: 700, color: 'var(--purple-brand)', fontSize: 13, textTransform: 'uppercase', marginBottom: 4 }}>
-              From:
-            </div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--ink)' }}>
-              {company.company_name || 'Permit Declaration'}
-            </div>
-            {company.address && (
-              <div style={{ color: 'var(--muted)', marginTop: 3, whiteSpace: 'pre-line' }}>{company.address}</div>
-            )}
-            {telLine && <div style={{ color: 'var(--muted)', marginTop: 2 }}>{telLine}</div>}
-            {company.email && <div style={{ color: 'var(--muted)', marginTop: 2 }}>Email: {company.email}</div>}
-            {company.website && <div style={{ color: 'var(--muted)', marginTop: 2 }}>{company.website}</div>}
+        {/* ── CUSTOMER INFO ── */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a1a', marginBottom: 4 }}>
+            {quotation.companyname || '—'}
           </div>
-
-          {/* To */}
+          {quotation.address && (
+            <div style={{ fontSize: 14, marginBottom: 8 }}>
+              Address : {quotation.address}
+            </div>
+          )}
+          <div style={{ marginBottom: 2 }}>
+            <span style={{ fontWeight: 700, minWidth: 160, display: 'inline-block' }}>Person Incharge</span>
+            <span> : {quotation.person_incharge || 'Person In-Charge'}</span>
+          </div>
           <div>
-            <div style={{ fontWeight: 700, color: 'var(--purple-brand)', fontSize: 13, textTransform: 'uppercase', marginBottom: 4 }}>
-              To:
-            </div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--ink)' }}>
-              {quotation.companyname || '—'}
-            </div>
-            {quotation.person_incharge && (
-              <div style={{ color: 'var(--ink)', fontWeight: 500, marginTop: 2 }}>
-                Attn: {quotation.person_incharge}
-              </div>
-            )}
-            {quotation.address && (
-              <div style={{ color: 'var(--muted)', marginTop: 2, whiteSpace: 'pre-line' }}>
-                {quotation.address}
-              </div>
-            )}
-            {(quotation.customer_contact || quotation.mobile_no) && (
-              <div style={{ color: 'var(--muted)', marginTop: 2 }}>
-                Phone: {quotation.customer_contact || quotation.mobile_no}
-              </div>
-            )}
+            <span style={{ fontWeight: 700, minWidth: 160, display: 'inline-block' }}>Tele</span>
+            <span style={{ paddingLeft: 62 }}> : {quotation.customer_contact || quotation.mobile_no || '—'}</span>
           </div>
         </div>
 
-        {/* Items Table */}
-        <div style={{ overflowX: 'auto', marginBottom: 24 }}>
-          <table
-            style={{
-              width: '100%',
-              borderCollapse: 'collapse',
-              fontSize: 13,
-            }}
-          >
-            <thead>
-              <tr style={{ background: 'var(--purple-brand)', color: '#ffffff' }}>
-                <th style={{ padding: '10px 12px', textAlign: 'center', width: 40, borderRadius: '6px 0 0 0' }}>#</th>
-                <th style={{ padding: '10px 12px', textAlign: 'left', width: '30%' }}>Product Name</th>
-                <th style={{ padding: '10px 12px', textAlign: 'left' }}>Description</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right', width: '14%' }}>Unit Cost ({currency})</th>
-                <th style={{ padding: '10px 12px', textAlign: 'center', width: '10%' }}>Qty</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right', width: '16%', borderRadius: '0 6px 0 0' }}>
-                  Total ({currency})
-                </th>
+        {/* ── TITLE ── */}
+        <h2 style={{
+          textAlign: 'center',
+          fontSize: 16,
+          fontWeight: 700,
+          color: '#1a1a1a',
+          margin: '24px 0 16px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+        }}>
+          OFFICIAL QUOTATION FOR PERMIT DECLARATIONS
+        </h2>
+
+        {/* ── PERMIT TYPES TABLE ── */}
+        <table style={{
+          width: '100%',
+          borderCollapse: 'collapse',
+          fontSize: 14,
+          marginBottom: 20,
+        }}>
+          <thead>
+            <tr>
+              <th style={{
+                border: '1px solid #333',
+                padding: '10px 14px',
+                textAlign: 'center',
+                fontWeight: 700,
+                fontSize: 14,
+                textTransform: 'uppercase',
+              }}>
+                PERMIT TYPES
+              </th>
+              <th style={{
+                border: '1px solid #333',
+                padding: '10px 14px',
+                textAlign: 'center',
+                fontWeight: 700,
+                fontSize: 14,
+                textTransform: 'uppercase',
+              }}>
+                PERMIT CHARGES
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.length === 0 ? (
+              <tr>
+                <td colSpan={2} style={{ border: '1px solid #333', padding: '10px 14px', textAlign: 'center', color: '#999' }}>
+                  No items listed on this quotation.
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {items.length === 0 ? (
-                <tr>
-                  <td colSpan={6} style={{ padding: '24px 0', textAlign: 'center', color: 'var(--muted)' }}>
-                    No items listed on this quotation.
+            ) : (
+              items.map((it, idx) => (
+                <tr key={idx}>
+                  <td style={{
+                    border: '1px solid #333',
+                    padding: '9px 14px',
+                    fontWeight: 400,
+                    textTransform: 'uppercase',
+                    fontSize: 14,
+                  }}>
+                    {it.productname || it.type || '—'}
+                  </td>
+                  <td style={{
+                    border: '1px solid #333',
+                    padding: '9px 14px',
+                    textAlign: 'center',
+                    fontSize: 14,
+                  }}>
+                    {Number(it.rate || it.total || 0).toFixed(2)} {currency}
                   </td>
                 </tr>
-              ) : (
-                items.map((it, idx) => (
-                  <tr
-                    key={idx}
-                    style={{
-                      borderBottom: '1px solid var(--line-soft)',
-                      background: idx % 2 === 1 ? 'var(--canvas)' : 'transparent',
-                    }}
-                  >
-                    <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--muted)' }}>{idx + 1}</td>
-                    <td style={{ padding: '10px 12px', fontWeight: 600 }}>{it.productname || it.type || '—'}</td>
-                    <td style={{ padding: '10px 12px', color: 'var(--ink-2)', whiteSpace: 'pre-line' }}>
-                      {it.description || '—'}
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace' }}>
-                      {Number(it.rate || 0).toFixed(2)}
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>{it.quantity || 1}</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, fontFamily: 'monospace' }}>
-                      {Number(it.total || (Number(it.rate || 0) * Number(it.quantity || 1))).toFixed(2)}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+              ))
+            )}
+          </tbody>
+        </table>
+
+        {/* ── ITEM COST ── */}
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 14 }}>Item Cost :</div>
+          <div style={{ marginBottom: 4 }}>
+            1st to 10th items <strong>No Charges</strong>
+          </div>
+          <div>
+            From 11th items onwards additional charge <strong>{currency} 0.50 Cents per line item</strong>
+          </div>
         </div>
 
-        {/* Totals & Notes Section */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1.2fr 1fr',
-            gap: 28,
-            alignItems: 'start',
-            marginBottom: 36,
-          }}
-        >
-          <div>
-            {quotation.notes && (
-              <div
-                style={{
-                  background: 'var(--canvas)',
-                  padding: '14px 16px',
-                  borderRadius: 8,
-                  fontSize: 12.5,
-                  color: 'var(--ink-2)',
-                }}
-              >
-                <div style={{ fontWeight: 700, color: 'var(--purple-brand)', marginBottom: 4 }}>Notes / Terms:</div>
-                <div style={{ whiteSpace: 'pre-line' }}>{quotation.notes}</div>
-              </div>
-            )}
-          </div>
+        {/* ── PERMIT TURN-AROUND TIME ── */}
+        <h3 style={{
+          textAlign: 'center',
+          fontSize: 15,
+          fontWeight: 700,
+          margin: '28px 0 14px',
+        }}>
+          (PERMIT TURN-AROUND TIME)
+        </h3>
 
-          <div
-            style={{
-              background: 'var(--canvas)',
-              padding: '16px 20px',
-              borderRadius: 8,
-              textAlign: 'right',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>Total Amount:</span>
-              <strong style={{ fontSize: 18, color: 'var(--purple-brand)', fontFamily: 'monospace' }}>
-                {currency} {subTotal.toFixed(2)}
-              </strong>
+        <table style={{
+          width: '100%',
+          borderCollapse: 'collapse',
+          fontSize: 14,
+          marginBottom: 28,
+        }}>
+          <thead>
+            <tr>
+              <th style={{
+                border: '1px solid #333',
+                padding: '9px 14px',
+                textAlign: 'center',
+                fontWeight: 700,
+              }}>
+                Priority :
+              </th>
+              <th style={{
+                border: '1px solid #333',
+                padding: '9px 14px',
+                textAlign: 'center',
+                fontWeight: 700,
+              }}>
+                Permit Returning Timings :
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              ['Normal Requests', 'Within 2hrs from time of Request'],
+              ['Urgent Requests', 'Within 60mins of Request'],
+              ['Super Urgent Requests', 'Within 30 mins of Request'],
+              ['Tier1/Control countries/Other Controlling Agencies', 'Depending upon the Customs queue'],
+            ].map(([priority, timing], idx) => (
+              <tr key={idx}>
+                <td style={{ border: '1px solid #333', padding: '9px 14px' }}>{priority}</td>
+                <td style={{ border: '1px solid #333', padding: '9px 14px', textAlign: 'center' }}>{timing}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* ── PROCEDURES ── */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 14 }}>Procedures :</div>
+          <div style={{ marginBottom: 4 }}>
+            To facilitate the customs permit application, kindly provide the following documents:
+          </div>
+          <div style={{ paddingLeft: 16, marginBottom: 6 }}>
+            .&nbsp; BL COPY / AWB COPY / Commercial Invoice / Packing List / NOA / BKG Form
+          </div>
+          <div style={{ marginBottom: 4 }}>
+            Send Your Permit Request To Our Ops Team : <strong>Email: {company.email || 'Ops@permitdeclaration.sg'}</strong> | CC: <strong>Customspermit.sg@gmail.com</strong>
+          </div>
+          <div style={{ marginBottom: 4 }}>
+            Upon receipt of the required documents, our ops team will process your permit application promptly. Approved
+            permit(s) will be forwarded to your email upon successful approval by Singapore Customs.
+          </div>
+        </div>
+
+        {/* ── OPERATING HOURS ── */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 14 }}>Operating Hours :</div>
+          <div style={{ marginBottom: 4 }}>
+            24 Hours | 7 Days a Week | Including Public Holidays at <strong>NO EXTRA COST</strong>
+          </div>
+          <div style={{ marginBottom: 4 }}>
+            We provide 24/7 Customs Permit Declaration Services to support your import and export operations at any time.
+          </div>
+          <div style={{ marginBottom: 4 }}>
+            <strong>24/7 Assistance WhatsApp / Contact: {company.mobile || company.tel || '+65 XXXX XXXX'}</strong>
+          </div>
+          <div>
+            <strong>Express Permit Processing : Additional {currency} 10.00 per permit.</strong>
+          </div>
+        </div>
+
+        {/* ── TERMS & CONDITIONS ── */}
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 14 }}>Terms &amp; Conditions :</div>
+          {[
+            `Payment for Declaration services shall be made within 7 days from the invoice date.`,
+            `Under our GIRO arrangement with Singapore Customs, all applicable GST, Customs Duties, and Government charges are deducted directly from our company's GIRO account.`,
+            `Customers are required to transfer the applicable GST and DUTY charges to our company's designated UOB bank account before permit submission and approval.`,
+            `Permit application will be processed for approval only after the GST payment has been received.`,
+            `Additional charges may apply for permit amendments, cancellations, controlled goods, licence applications, or other special customs requirements.`,
+            `Unless otherwise stated, this quotation is valid for 10 days from the date of issue.`,
+          ].map((term, idx) => (
+            <div key={idx} style={{ paddingLeft: 16, marginBottom: 4 }}>
+              .&nbsp; {term}
+            </div>
+          ))}
+          <div style={{ marginTop: 8 }}>
+            Thank you for choosing {companyName} Permit Declaration Services. We look forward to serving you with fast, reliable,
+            and professional support 24/7.
+          </div>
+        </div>
+
+        {/* ── SIGN-OFF ── */}
+        <div style={{ textAlign: 'right', marginTop: 40 }}>
+          <div style={{
+            fontWeight: 700,
+            fontSize: 15,
+            color: '#1b2a4a',
+            textTransform: 'uppercase',
+          }}>
+            THANKS &amp; BEST REGARDS
+          </div>
+          <div style={{
+            fontWeight: 700,
+            fontSize: 15,
+            color: '#1b2a4a',
+            textTransform: 'uppercase',
+            marginBottom: 40,
+          }}>
+            GANI - CEO
+          </div>
+        </div>
+
+        {/* ── SIGNATURE LINE ── */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+          <div style={{ textAlign: 'center', minWidth: 240 }}>
+            <div style={{
+              borderBottom: '1px dotted #666',
+              width: 220,
+              marginLeft: 'auto',
+              marginRight: 'auto',
+              marginBottom: 8,
+            }} />
+            <div style={{ fontWeight: 700, fontSize: 13, color: '#333' }}>
+              (AUTHORISED SIGNATURE)
             </div>
           </div>
         </div>
 
-        {/* Sign-off Signature Line */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 40, textAlign: 'right' }}>
-          <div style={{ minWidth: 220 }}>
-            <div
-              style={{
-                borderBottom: '1px dotted #999999',
-                width: 200,
-                marginLeft: 'auto',
-                marginBottom: 6,
-              }}
-            />
-            <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--muted)' }}>(AUTHORISED SIGNATURE)</div>
+        {/* ── NOTES (if any custom notes were added) ── */}
+        {quotation.notes && (
+          <div style={{
+            marginTop: 28,
+            paddingTop: 16,
+            borderTop: '1px solid #ddd',
+            fontSize: 13,
+            color: '#555',
+          }}>
+            <div style={{ fontWeight: 700, marginBottom: 4, color: '#333' }}>Additional Notes:</div>
+            <div style={{ whiteSpace: 'pre-line' }}>{quotation.notes}</div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Print Specific Styles */}
+      {/* ── Print Styles ── */}
       <style>{`
         @media print {
           body {
@@ -401,6 +471,7 @@ export default function QuotationView() {
             padding: 10mm 15mm !important;
             max-width: 100% !important;
             width: 100% !important;
+            border-radius: 0 !important;
           }
         }
       `}</style>

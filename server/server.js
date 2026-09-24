@@ -65,10 +65,15 @@ app.use('/assets', express.static(path.join(clientPath, 'assets'), {
   immutable: true,
 }));
 
-// Other static files — cache for 1 hour
+// Other static files — no cache to always serve fresh index.html
 app.use(express.static(clientPath, {
-  maxAge: '1h',
+  maxAge: 0,
   etag: true,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  },
 }));
 
 app.get('*', (req, res, next) => {

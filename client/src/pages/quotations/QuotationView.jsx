@@ -397,26 +397,7 @@ export default function QuotationView() {
           </div>
         </div>
 
-        {/* ── SIGN-OFF ── */}
-        <div style={{ textAlign: 'right', marginTop: 40 }}>
-          <div style={{
-            fontWeight: 700,
-            fontSize: 15,
-            color: '#1b2a4a',
-            textTransform: 'uppercase',
-          }}>
-            THANKS &amp; BEST REGARDS
-          </div>
-          <div style={{
-            fontWeight: 700,
-            fontSize: 15,
-            color: '#1b2a4a',
-            textTransform: 'uppercase',
-            marginBottom: 40,
-          }}>
-            GANI - CEO
-          </div>
-        </div>
+
 
         {/* ── SIGNATURE LINE ── */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>

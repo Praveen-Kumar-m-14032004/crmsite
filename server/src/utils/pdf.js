@@ -782,9 +782,7 @@ function quotationPdfDefinition(quotation = {}, settings = {}) {
       { text: '  .  Unless otherwise stated, this quotation is valid for 10 days from the date of issue.', fontSize: 9, margin: [0, 0, 0, 4] },
       { text: `Thank you for choosing ${companyName} Permit Declaration Services. We look forward to serving you with fast, reliable, and professional support 24/7.`, fontSize: 9, margin: [0, 0, 0, 16] },
 
-      /* SIGN-OFF */
-      { text: 'THANKS & BEST REGARDS', bold: true, fontSize: 10.5, color: '#1b2a4a', alignment: 'right', margin: [0, 0, 0, 1] },
-      { text: 'GANI - CEO', bold: true, fontSize: 10.5, color: '#1b2a4a', alignment: 'right', margin: [0, 0, 0, 30] },
+      /* SIGNATURE BLOCK */
 
       /* SIGNATURE LINE */
       {

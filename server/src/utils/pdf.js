@@ -660,20 +660,10 @@ function quotationPdfDefinition(quotation = {}, settings = {}) {
     pageSize: 'A4',
     pageMargins: [40, 35, 40, 30],
     content: [
-      /* HEADER: Logo left, Date + Quotation No right */
-      {
-        columns: [
-          { width: 340, stack: [logoBlock()] },
-          {
-            width: '*',
-            stack: [
-              { text: `DATE : ${formatDate(quotation.quotation_date || quotation.created_at)}`, style: 'dateLabel', alignment: 'right' },
-              { text: `Quotation No : ${quotation.quotation_no || ''}`, style: 'dateLabel', alignment: 'right', margin: [0, 2, 0, 0] },
-            ],
-          },
-        ],
-        margin: [0, 0, 0, 20],
-      },
+      /* HEADER: Logo + Date left-aligned */
+      logoBlock(),
+      { text: `DATE : ${formatDate(quotation.quotation_date || quotation.created_at)}`, style: 'dateLabel', margin: [0, 12, 0, 0] },
+      { text: `Quotation No : ${quotation.quotation_no || ''}`, style: 'dateLabel', margin: [0, 2, 0, 14] },
 
       /* CUSTOMER INFO */
       { text: (quotation.companyname || '').toUpperCase(), bold: true, fontSize: 11, margin: [0, 0, 0, 3] },

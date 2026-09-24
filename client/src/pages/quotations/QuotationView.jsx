@@ -96,18 +96,14 @@ export default function QuotationView() {
         borderRadius: 2, ...TS, fontSize: 14.5, lineHeight: 1.7,
       }}>
 
-        {/* HEADER: Logo left | Date & Quotation No left-aligned below logo area */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-          <div>
-            <img src={logoImg} alt={companyName} style={{ width: 180, height: 'auto', display: 'block' }} />
+        {/* HEADER: Logo left, Date & Quotation No below on left */}
+        <div style={{ marginBottom: 20 }}>
+          <img src={logoImg} alt={companyName} style={{ width: 180, height: 'auto', display: 'block', marginBottom: 16 }} />
+          <div style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>
+            DATE : {formatDateDMY(quotation.quotation_date || quotation.created_at)}
           </div>
-          <div style={{ textAlign: 'left' }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>
-              DATE : {formatDateDMY(quotation.quotation_date || quotation.created_at)}
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: NAVY, marginTop: 3 }}>
-              Quotation No : {quotation.quotation_no}
-            </div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: NAVY, marginTop: 3 }}>
+            Quotation No : {quotation.quotation_no}
           </div>
         </div>
 

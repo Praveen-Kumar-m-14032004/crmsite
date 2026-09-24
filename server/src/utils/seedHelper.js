@@ -7,6 +7,7 @@ const permissionRows = [
   ['products.view', 'products', 'view'], ['products.create', 'products', 'create'], ['products.edit', 'products', 'edit'], ['products.delete', 'products', 'delete'],
   ['invoices.view', 'invoices', 'view'], ['invoices.create', 'invoices', 'create'], ['invoices.edit', 'invoices', 'edit'], ['invoices.delete', 'invoices', 'delete'], ['invoices.print', 'invoices', 'print'],
   ['reports.view', 'reports', 'view'], ['reports.export', 'reports', 'export'], ['users.manage', 'users', 'manage'], ['roles.manage', 'roles', 'manage'], ['settings.manage', 'settings', 'manage'], ['dashboard.view', 'dashboard', 'view'],
+  ['quotations.view', 'quotations', 'view'], ['quotations.create', 'quotations', 'create'], ['quotations.edit', 'quotations', 'edit'], ['quotations.delete', 'quotations', 'delete'], ['quotations.print', 'quotations', 'print'],
 ];
 
 const roleRows = [
@@ -18,9 +19,9 @@ const roleRows = [
 
 const roleCodes = {
   1: permissionRows.map(([code]) => code),
-  2: ['customers.view', 'customers.create', 'customers.edit', 'products.view', 'invoices.view', 'invoices.create', 'invoices.edit', 'invoices.delete', 'invoices.print', 'reports.view', 'reports.export', 'dashboard.view'],
-  3: ['customers.view', 'customers.create', 'customers.edit', 'products.view', 'invoices.view', 'dashboard.view'],
-  4: ['customers.view', 'products.view', 'invoices.view', 'reports.view', 'reports.export', 'dashboard.view'],
+  2: ['customers.view', 'customers.create', 'customers.edit', 'products.view', 'invoices.view', 'invoices.create', 'invoices.edit', 'invoices.delete', 'invoices.print', 'quotations.view', 'quotations.create', 'quotations.edit', 'quotations.delete', 'quotations.print', 'reports.view', 'reports.export', 'dashboard.view'],
+  3: ['customers.view', 'customers.create', 'customers.edit', 'products.view', 'invoices.view', 'quotations.view', 'quotations.create', 'dashboard.view'],
+  4: ['customers.view', 'products.view', 'invoices.view', 'quotations.view', 'reports.view', 'reports.export', 'dashboard.view'],
 };
 
 const products = [
@@ -36,11 +37,12 @@ async function seedDefaults(overrideUsername, overridePassword) {
   const permissions = db.collection('permissions');
   for (let index = 0; index < permissionRows.length; index += 1) {
     const [code, module, action] = permissionRows[index];
-    await permissions.updateOne(
-      { code },
-      { $setOnInsert: { id: index + 1, code, module, action } },
-      { upsert: true }
-    );
+    const existing = await permissions.findOne({ code });
+    if (!existing) {
+      const maxDoc = await permissions.find().sort({ id: -1 }).limit(1).toArray();
+      const nextIdVal = maxDoc.length > 0 && maxDoc[0].id ? maxDoc[0].id + 1 : index + 1;
+      await permissions.insertOne({ id: nextIdVal, code, module, action });
+    }
   }
 
   for (const [id, name, description, is_system] of roleRows) {

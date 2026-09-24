@@ -2,7 +2,7 @@ const { getDb } = require('../config/db');
 
 const COLLECTIONS = [
   'roles', 'permissions', 'role_permissions', 'users', 'company_settings',
-  'customers', 'products', 'invoices', 'invoice_items',
+  'customers', 'products', 'invoices', 'invoice_items', 'quotations',
 ];
 
 function collection(name) {

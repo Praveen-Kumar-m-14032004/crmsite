@@ -36,6 +36,16 @@ export const invoicesApi = {
   permanentDelete: (id) => api.delete(`/invoices/${id}/permanent`),
 };
 
+export const quotationsApi = {
+  list: (params) => api.get('/quotations', { params }),
+  get: (id) => api.get(`/quotations/${id}`),
+  nextNumber: () => api.get('/quotations/next-number'),
+  create: (data) => api.post('/quotations', data),
+  update: (id, data) => api.put(`/quotations/${id}`, data),
+  remove: (id) => api.delete(`/quotations/${id}`),
+  pdfUrl: (id) => `/api/quotations/${id}/pdf`,
+};
+
 export const reportsApi = {
   search: (params) => api.get('/reports', { params }),
 };

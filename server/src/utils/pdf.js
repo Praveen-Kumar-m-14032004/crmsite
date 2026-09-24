@@ -642,11 +642,251 @@ function reportPdfDefinition(rows, filters, summary) {
   };
 }
 
+function quotationPdfDefinition(quotation = {}, company = {}) {
+  const quoteDate = formatDate(quotation.quotation_date || quotation.date || new Date());
+  const quoteNo = quotation.quotation_no || 'PD-0926-0001';
+
+  const defaultRates = [
+    { type: 'EXPORT PERMITS', charge: '11.00 SGD' },
+    { type: 'IMPORT PERMITS', charge: '11.00 SGD' },
+    { type: 'IMPORTER OF THE RECORD', charge: '30.00 SGD' },
+    { type: 'USING PERMIT DECLARATION SFA LICENSE', charge: '25.00 SGD' },
+    { type: 'CERTIFICATE OF ORIGINS', charge: '50.00 SGD' },
+    { type: 'PERMIT AMENDMENTS', charge: '0.50 SGD' },
+    { type: 'CANCELLATION/REJECTION', charge: '0.50 SGD' },
+  ];
+
+  const items = quotation.items && quotation.items.length > 0 ? quotation.items : defaultRates;
+
+  const defaultTurnarounds = [
+    { priority: 'Normal Requests', timing: 'Within 2hrs from time of Request' },
+    { priority: 'Urgent Requests', timing: 'Within 60mins of Request' },
+    { priority: 'Super Urgent Requests', timing: 'Within 30 mins of Request' },
+    { priority: 'Tier1/Control countries/Other Controlling Agencies', timing: 'Depending upon the Customs queue' },
+  ];
+
+  const turnarounds = quotation.turnarounds && quotation.turnarounds.length > 0 ? quotation.turnarounds : defaultTurnarounds;
+
+  const opsEmail = quotation.ops_email || company.email || 'Ops@aula.com.sg';
+  const ccEmail = quotation.cc_email || 'Customspermit.sg@gmail.com';
+  const contacts = quotation.contact_numbers || '+65 8370 1443 & +65 8919 7865 / +65 8322 5509';
+
+  return {
+    pageSize: 'A4',
+    pageMargins: [36, 26, 36, 26],
+    content: [
+      // Top Header: Logo on left, Date & Quotation No on right
+      {
+        columns: [
+          {
+            width: '*',
+            stack: [logoBlock()],
+          },
+          {
+            width: 'auto',
+            stack: [
+              { text: `DATE : ${quoteDate}`, bold: true, fontSize: 9, alignment: 'right' },
+              { text: `Quotaion No : ${quoteNo}`, bold: true, fontSize: 9, alignment: 'right', margin: [0, 3, 0, 0] },
+            ],
+          },
+        ],
+        margin: [0, 0, 0, 10],
+      },
+
+      // Customer Info
+      {
+        stack: [
+          { text: quotation.companyname || 'DJCARGO', bold: true, fontSize: 10 },
+          { text: `Address : ${quotation.address || '71 WOODLANDS INDUSTRIAL PARK E9 #01-19 SINGAPORE 757048'}`, fontSize: 8.5, margin: [0, 3, 0, 0] },
+          {
+            columns: [
+              { text: `Person Incharge : ${quotation.person_incharge || 'Person In-Charge'}`, width: 'auto', fontSize: 8.5 },
+            ],
+            margin: [0, 2, 0, 0],
+          },
+          { text: `Tele : ${quotation.mobile_no || quotation.tele || '+65 88359180'}`, fontSize: 8.5, margin: [0, 2, 0, 0] },
+        ],
+        margin: [0, 0, 0, 10],
+      },
+
+      // Official Quotation Title
+      {
+        text: 'OFFICIAL QUOTATION FOR PERMIT DECLARATIONS',
+        bold: true,
+        fontSize: 10,
+        alignment: 'center',
+        margin: [0, 0, 0, 6],
+      },
+
+      // Table 1: Permit Types & Charges
+      {
+        table: {
+          headerRows: 1,
+          widths: ['*', 130],
+          body: [
+            [
+              { text: 'PERMIT TYPES', bold: true, fontSize: 8.5, alignment: 'center', fillColor: '#f8f9fa' },
+              { text: 'PERMIT CHARGES', bold: true, fontSize: 8.5, alignment: 'center', fillColor: '#f8f9fa' },
+            ],
+            ...items.map((it) => [
+              { text: it.type || it.productname || '', fontSize: 8, margin: [6, 2.5, 6, 2.5] },
+              { text: it.charge || `${Number(it.rate || 0).toFixed(2)} SGD`, fontSize: 8, alignment: 'center', margin: [4, 2.5, 4, 2.5] },
+            ]),
+          ],
+        },
+        layout: {
+          hLineWidth: () => 0.65,
+          vLineWidth: () => 0.65,
+          hLineColor: () => '#444444',
+          vLineColor: () => '#444444',
+        },
+        margin: [0, 0, 0, 6],
+      },
+
+      // Item Cost Note
+      {
+        stack: [
+          { text: 'Item Cost :', bold: true, fontSize: 8.5 },
+          { text: '1st to 10th items No Charges', fontSize: 8, margin: [0, 1, 0, 0] },
+          {
+            text: [
+              { text: 'From 11th items onwards additional charge ', fontSize: 8 },
+              { text: 'SGD 0.50 Cents per line item', bold: true, fontSize: 8 },
+            ],
+            margin: [0, 1, 0, 0],
+          },
+        ],
+        margin: [0, 0, 0, 8],
+      },
+
+      // Turnaround Time Title
+      {
+        text: '(PERMIT TURN-AROUND TIME)',
+        bold: true,
+        fontSize: 9,
+        alignment: 'center',
+        margin: [0, 0, 0, 5],
+      },
+
+      // Table 2: Priority & Timings
+      {
+        table: {
+          headerRows: 1,
+          widths: ['42%', '58%'],
+          body: [
+            [
+              { text: 'Priority :', bold: true, fontSize: 8.5, alignment: 'center', fillColor: '#f8f9fa' },
+              { text: 'Permit Returning Timings :', bold: true, fontSize: 8.5, alignment: 'center', fillColor: '#f8f9fa' },
+            ],
+            ...turnarounds.map((t) => [
+              { text: t.priority, fontSize: 7.8, margin: [6, 2.2, 6, 2.2] },
+              { text: t.timing, fontSize: 7.8, alignment: 'center', margin: [4, 2.2, 4, 2.2] },
+            ]),
+          ],
+        },
+        layout: {
+          hLineWidth: () => 0.65,
+          vLineWidth: () => 0.65,
+          hLineColor: () => '#444444',
+          vLineColor: () => '#444444',
+        },
+        margin: [0, 0, 0, 7],
+      },
+
+      // Procedures
+      {
+        stack: [
+          { text: 'Procedures :', bold: true, fontSize: 8.5 },
+          { text: 'To facilitate the customs permit application, kindly provide the following documents:', fontSize: 7.8, margin: [0, 1.5, 0, 0] },
+          { text: '. BL COPY / AWB COPY / Commercial Invoice / Packing List / NOA / BKG Form', fontSize: 7.8, margin: [0, 1.5, 0, 0] },
+          {
+            text: [
+              { text: 'Send Your Permit Request To Our Ops Team : ', bold: true, fontSize: 7.8 },
+              { text: `Email: ${opsEmail} | CC: ${ccEmail}`, bold: true, fontSize: 7.8 },
+            ],
+            margin: [0, 1.5, 0, 0],
+          },
+          { text: 'Upon receipt of the required documents, our ops team will process your permit application promptly. Approved permit(s) will be forwarded to your email upon successful approval by Singapore Customs.', fontSize: 7.8, margin: [0, 1.5, 0, 0] },
+        ],
+        margin: [0, 0, 0, 6],
+      },
+
+      // Operating Hours
+      {
+        stack: [
+          { text: 'Operating Hours :', bold: true, fontSize: 8.5 },
+          {
+            text: [
+              { text: '24 Hours | 7 Days a Week | Including Public Holidays at ', fontSize: 7.8 },
+              { text: 'NO EXTRA COST', bold: true, fontSize: 7.8 },
+            ],
+            margin: [0, 1.5, 0, 0],
+          },
+          { text: 'We provide 24/7 Customs Permit Declaration Services to support your import and export operations at any time.', fontSize: 7.8, margin: [0, 1.5, 0, 0] },
+          {
+            text: [
+              { text: '24/7 Assistance WhatsApp / Contact: ', bold: true, fontSize: 7.8 },
+              { text: contacts, bold: true, fontSize: 7.8 },
+            ],
+            margin: [0, 1.5, 0, 0],
+          },
+          {
+            text: [
+              { text: 'Express Permit Processing : ', bold: true, fontSize: 7.8 },
+              { text: 'Additional SGD 10.00 per permit.', fontSize: 7.8 },
+            ],
+            margin: [0, 1.5, 0, 0],
+          },
+        ],
+        margin: [0, 0, 0, 6],
+      },
+
+      // Terms & Conditions
+      {
+        stack: [
+          { text: 'Terms & Conditions :', bold: true, fontSize: 8.5 },
+          { text: '. Payment for Declaration services shall be made within 7 days from the invoice date.', fontSize: 7.6, margin: [0, 1.2, 0, 0] },
+          { text: ". Under our GIRO arrangement with Singapore Customs, all applicable GST, Customs Duties, and Government charges are deducted directly from our company's GIRO account.", fontSize: 7.6, margin: [0, 1.2, 0, 0] },
+          { text: ". Customers are required to transfer the applicable GST and DUTY charges to our company's designated UOB bank account before permit submission and approval.", fontSize: 7.6, margin: [0, 1.2, 0, 0] },
+          { text: '. Permit application will be processed for approval only after the GST payment has been received.', fontSize: 7.6, margin: [0, 1.2, 0, 0] },
+          { text: '. Additional charges may apply for permit amendments, cancellations, controlled goods, licence applications, or other special customs requirements.', fontSize: 7.6, margin: [0, 1.2, 0, 0] },
+          { text: '. Unless otherwise stated, this quotation is valid for 10 days from the date of issue.', fontSize: 7.6, margin: [0, 1.2, 0, 0] },
+          { text: 'Thank you for choosing Permit Declaration Services. We look forward to serving you with fast, reliable, and professional support 24/7.', fontSize: 7.6, margin: [0, 2, 0, 0] },
+        ],
+        margin: [0, 0, 0, 10],
+      },
+
+      // Sign-off block (clean, no specific CEO name per user's feedback)
+      {
+        columns: [
+          { width: '*', text: '' },
+          {
+            width: 220,
+            alignment: 'right',
+            stack: [
+              { text: 'THANKS & BEST REGARDS', bold: true, fontSize: 8.5, alignment: 'right' },
+              { text: 'YOURS FAITHFULLY', fontSize: 8, alignment: 'right', margin: [0, 14, 0, 18] },
+              { text: '.......................................................', color: '#999999', fontSize: 8, alignment: 'right' },
+              { text: '(AUTHORISED SIGNATURE)', bold: true, fontSize: 8, alignment: 'right', margin: [0, 2, 0, 0] },
+            ],
+          },
+        ],
+      },
+    ],
+    styles: {
+      wordmark: { fontSize: 13, bold: true, color: PURPLE, lineHeight: 1 },
+    },
+    defaultStyle: { font: 'Lato', fontSize: 8, color: INK },
+  };
+}
+
 module.exports = {
   buildPdf,
   createPdfStream,
   invoicePdfDefinition,
+  quotationPdfDefinition,
   reportPdfDefinition,
   formatDate,
   money,
 };
+

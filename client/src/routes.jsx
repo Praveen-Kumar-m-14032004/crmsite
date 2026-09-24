@@ -9,6 +9,9 @@ import AddProduct from './pages/products/AddProduct';
 import ManageProduct from './pages/products/ManageProduct';
 import AddInvoice from './pages/invoices/AddInvoice';
 import ManageInvoice from './pages/invoices/ManageInvoice';
+import ManageQuotation from './pages/quotations/ManageQuotation';
+import AddQuotation from './pages/quotations/AddQuotation';
+import QuotationView from './pages/quotations/QuotationView';
 import Reports from './pages/reports/Reports';
 import AddUser from './pages/users/AddUser';
 import ManageUsers from './pages/users/ManageUsers';
@@ -35,6 +38,12 @@ export default function AppRoutes() {
         <Route path="/invoices/trash" element={<PermissionRoute permission="invoices.delete"><ManageInvoice /></PermissionRoute>} />
         <Route path="/invoices/add" element={<PermissionRoute permission="invoices.create"><AddInvoice /></PermissionRoute>} />
         <Route path="/invoices/:id/edit" element={<PermissionRoute permission="invoices.edit"><AddInvoice /></PermissionRoute>} />
+
+        <Route path="/estimates" element={<PermissionRoute permission={['quotations.view', 'invoices.view']}><ManageQuotation /></PermissionRoute>} />
+        <Route path="/estimates/add" element={<PermissionRoute permission={['quotations.create', 'invoices.create']}><AddQuotation /></PermissionRoute>} />
+        <Route path="/estimates/:id" element={<PermissionRoute permission={['quotations.view', 'invoices.view']}><QuotationView /></PermissionRoute>} />
+        <Route path="/estimates/:id/edit" element={<PermissionRoute permission={['quotations.edit', 'invoices.edit']}><AddQuotation /></PermissionRoute>} />
+        <Route path="/quotations" element={<Navigate to="/estimates" replace />} />
 
         <Route path="/reports" element={<PermissionRoute permission="reports.view"><Reports /></PermissionRoute>} />
 

@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/AuthContext';
 import {
   BrandLockup, ChevronRight, CustomersIcon, DashboardIcon, InvoiceIcon,
-  ProductsIcon, ReportsIcon, SettingsIcon, TrashIcon, UsersIcon,
+  ProductsIcon, QuotationIcon, ReportsIcon, SettingsIcon, TrashIcon, UsersIcon,
 } from '../common/Icons';
 
 const MENU = [
@@ -28,6 +28,13 @@ const MENU = [
     children: [
       { label: 'Add Invoice', to: '/invoices/add', permission: 'invoices.create' },
       { label: 'Manage Invoice', to: '/invoices', permission: 'invoices.view' },
+    ],
+  },
+  {
+    type: 'group', label: 'Quotation', permission: ['quotations.view', 'invoices.view'], icon: QuotationIcon,
+    children: [
+      { label: 'Add Quotation', to: '/estimates/add', permission: ['quotations.create', 'invoices.create'] },
+      { label: 'Manage Quotation', to: '/estimates', permission: ['quotations.view', 'invoices.view'] },
     ],
   },
   { type: 'link', label: 'Reports', to: '/reports', permission: 'reports.view', icon: ReportsIcon },

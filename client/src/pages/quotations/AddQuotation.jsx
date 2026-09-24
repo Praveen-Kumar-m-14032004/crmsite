@@ -1,28 +1,14 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
-import { customersApi, quotationsApi, settingsApi } from '../../api/endpoints';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { customersApi, productsApi, quotationsApi, settingsApi } from '../../api/endpoints';
 import { errorMessage, useToast } from '../../hooks/ToastContext';
-import SearchableSelect from '../../components/common/SearchableSelect';
+import { toDateInputValue } from '../../utils/date';
 import { PlusIcon, SpinnerIcon, TrashIcon } from '../../components/common/Icons';
+import SearchableSelect from '../../components/common/SearchableSelect';
 
 const today = () => new Date().toISOString().slice(0, 10);
-
-const DEFAULT_RATES = [
-  { type: 'EXPORT PERMITS', charge: '11.00 SGD' },
-  { type: 'IMPORT PERMITS', charge: '11.00 SGD' },
-  { type: 'IMPORTER OF THE RECORD', charge: '30.00 SGD' },
-  { type: 'USING PERMIT DECLARATION SFA LICENSE', charge: '25.00 SGD' },
-  { type: 'CERTIFICATE OF ORIGINS', charge: '50.00 SGD' },
-  { type: 'PERMIT AMENDMENTS', charge: '0.50 SGD' },
-  { type: 'CANCELLATION/REJECTION', charge: '0.50 SGD' },
-];
-
-const DEFAULT_TURNAROUNDS = [
-  { priority: 'Normal Requests', timing: 'Within 2hrs from time of Request' },
-  { priority: 'Urgent Requests', timing: 'Within 60mins of Request' },
-  { priority: 'Super Urgent Requests', timing: 'Within 30 mins of Request' },
-  { priority: 'Tier1/Control countries/Other Controlling Agencies', timing: 'Depending upon the Customs queue' },
-];
+const emptyItem = () => ({ product_id: '', productname: '', description: '', rate: '', quantity: 1 });
+const defaultItems = () => Array.from({ length: 4 }, emptyItem);
 
 export default function AddQuotation() {
   const { id } = useParams();
@@ -31,57 +17,63 @@ export default function AddQuotation() {
   const toast = useToast();
 
   const [customers, setCustomers] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [currency, setCurrency] = useState('SGD');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   const [quotationNo, setQuotationNo] = useState('');
   const [quotationDate, setQuotationDate] = useState(today());
   const [customerId, setCustomerId] = useState('');
   const [companyName, setCompanyName] = useState('');
-  const [address, setAddress] = useState('');
-  const [personIncharge, setPersonIncharge] = useState('');
-  const [mobileNo, setMobileNo] = useState('');
-
-  const [items, setItems] = useState(DEFAULT_RATES);
-  const [turnarounds, setTurnarounds] = useState(DEFAULT_TURNAROUNDS);
-
-  const [opsEmail, setOpsEmail] = useState('Ops@aula.com.sg');
-  const [ccEmail, setCcEmail] = useState('Customspermit.sg@gmail.com');
-  const [contactNumbers, setContactNumbers] = useState('+65 8370 1443 & +65 8919 7865 / +65 8322 5509');
+  const [customerContact, setCustomerContact] = useState('');
+  const [customerAddress, setCustomerAddress] = useState('');
+  const [items, setItems] = useState(defaultItems());
+  const [notes, setNotes] = useState('');
 
   useEffect(() => {
     let alive = true;
     Promise.all([
       customersApi.list({ limit: 1000 }),
+      productsApi.list({ limit: 1000 }),
       settingsApi.get().catch(() => ({ data: {} })),
       isEdit ? quotationsApi.get(id) : quotationsApi.nextNumber(),
     ])
-      .then(([cRes, sRes, qRes]) => {
+      .then(([cRes, pRes, sRes, qRes]) => {
         if (!alive) return;
         setCustomers(cRes.data.data || []);
-        if (sRes.data?.email) {
-          setOpsEmail(sRes.data.email);
-        }
+        setProducts(pRes.data.data || []);
+        setCurrency(sRes.data?.default_currency || 'SGD');
 
         if (isEdit) {
           const q = qRes.data;
           setQuotationNo(q.quotation_no || '');
-          setQuotationDate(q.quotation_date ? q.quotation_date.slice(0, 10) : today());
-          setCustomerId(q.customer_id ? String(q.customer_id) : '');
+          setQuotationDate(toDateInputValue(q.quotation_date || q.created_at));
+          setCustomerId(q.customer_id ? String(q.customer_id) : (q.companyname || ''));
           setCompanyName(q.companyname || '');
-          setAddress(q.address || '');
-          setPersonIncharge(q.person_incharge || '');
-          setMobileNo(q.mobile_no || '');
-          if (Array.isArray(q.items) && q.items.length) setItems(q.items);
-          if (Array.isArray(q.turnarounds) && q.turnarounds.length) setTurnarounds(q.turnarounds);
-          if (q.ops_email) setOpsEmail(q.ops_email);
-          if (q.cc_email) setCcEmail(q.cc_email);
-          if (q.contact_numbers) setContactNumbers(q.contact_numbers);
+          setCustomerContact(q.customer_contact || q.mobile_no || '');
+          setCustomerAddress(q.address || '');
+          setNotes(q.notes || '');
+
+          if (Array.isArray(q.items) && q.items.length) {
+            setItems(
+              q.items.map((it) => ({
+                product_id: it.product_id ? String(it.product_id) : (it.productname || ''),
+                productname: it.productname || '',
+                description: it.description || '',
+                rate: it.rate !== undefined && it.rate !== null ? String(it.rate) : '',
+                quantity: it.quantity ? String(Number(it.quantity)) : '1',
+              }))
+            );
+          } else {
+            setItems(defaultItems());
+          }
         } else {
           setQuotationNo(qRes.data.quotation_no || '');
         }
       })
-      .catch((err) => toast.error(errorMessage(err, 'Could not load quotation details')))
+      .catch((err) => setError(errorMessage(err, 'Could not load quotation form data')))
       .finally(() => {
         if (alive) setLoading(false);
       });
@@ -91,70 +83,158 @@ export default function AddQuotation() {
     };
   }, [id, isEdit]);
 
-  const handleCustomerSelect = (val) => {
-    setCustomerId(val);
-    const selected = customers.find((c) => String(c.id) === String(val) || c.companyname === val);
-    if (selected) {
-      setCompanyName(selected.companyname || '');
-      setAddress(selected.address || '');
-      setPersonIncharge(selected.person_incharge || '');
-      setMobileNo(selected.mobile_no || '');
+  const subAmount = useMemo(
+    () => items.reduce((sum, it) => sum + (Number(it.rate) || 0) * (Number(it.quantity) || 0), 0),
+    [items]
+  );
+
+  const customerOptions = useMemo(
+    () =>
+      customers.map((c) => ({
+        value: String(c.id),
+        label: `${c.companyname} ${c.mobile_no ? `(${c.mobile_no})` : ''}`,
+      })),
+    [customers]
+  );
+
+  const productOptions = useMemo(
+    () =>
+      products.map((p) => ({
+        value: String(p.id),
+        label: p.productname,
+      })),
+    [products]
+  );
+
+  const handleCustomerChange = (value) => {
+    setCustomerId(value);
+    const trimmedVal = String(value).trim().toLowerCase();
+    const cust = customers.find(
+      (c) => String(c.id) === String(value) || c.companyname?.trim().toLowerCase() === trimmedVal
+    );
+    if (cust) {
+      setCompanyName(cust.companyname);
+      setCustomerContact(cust.mobile_no || '');
+      setCustomerAddress(cust.address || '');
     } else {
-      setCompanyName(val);
+      setCompanyName(value);
     }
   };
 
-  const handleItemChange = (index, field, value) => {
+  const updateItem = (index, field, value) => {
     setItems((prev) => {
       const next = [...prev];
-      next[index] = { ...next[index], [field]: value };
+      const item = { ...next[index], [field]: value };
+
+      if (field === 'product_id') {
+        const prod = products.find(
+          (p) => String(p.id) === String(value) || p.productname?.toLowerCase().trim() === String(value).toLowerCase().trim()
+        );
+        if (prod) {
+          item.productname = prod.productname;
+          if (prod.rate && !item.rate) item.rate = String(prod.rate);
+          if (prod.description && !item.description) item.description = prod.description;
+        } else {
+          item.productname = value;
+        }
+      }
+      next[index] = item;
       return next;
     });
   };
 
-  const addItemRow = () => {
-    setItems((prev) => [...prev, { type: '', charge: '0.00 SGD' }]);
-  };
+  const addRow = () => setItems((prev) => [...prev, emptyItem()]);
+  const removeRow = (index) => setItems((prev) => prev.filter((_, i) => i !== index));
 
-  const removeItemRow = (index) => {
-    setItems((prev) => prev.filter((_, i) => i !== index));
+  const resetForm = () => {
+    setCustomerId('');
+    setCompanyName('');
+    setCustomerContact('');
+    setCustomerAddress('');
+    setItems(defaultItems());
+    setNotes('');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!companyName.trim()) {
-      toast.error('Please specify Company Name');
+    setError('');
+
+    const targetCustomerName = companyName.trim() || String(customerId).trim();
+    if (!targetCustomerName) {
+      const msg = 'Please specify or select a customer';
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    const itemsToSave = items.filter(
+      (it) => it.product_id || it.productname || it.description || Number(it.rate) > 0
+    );
+
+    if (itemsToSave.length === 0) {
+      const msg = 'Please add at least one item to the quotation';
+      setError(msg);
+      toast.error(msg);
       return;
     }
 
     setSaving(true);
-    const payload = {
-      quotation_no: quotationNo,
-      customer_id: customerId || null,
-      companyname: companyName.trim(),
-      address: address.trim(),
-      person_incharge: personIncharge.trim(),
-      mobile_no: mobileNo.trim(),
-      quotation_date: quotationDate,
-      items,
-      turnarounds,
-      ops_email: opsEmail.trim(),
-      cc_email: ccEmail.trim(),
-      contact_numbers: contactNumbers.trim(),
-    };
-
     try {
+      let finalCustId = null;
+      let finalCustName = targetCustomerName;
+
+      const trimmedCust = String(customerId).trim();
+      const existingCust = customers.find(
+        (c) => String(c.id) === trimmedCust || c.companyname?.toLowerCase().trim() === trimmedCust.toLowerCase()
+      );
+      if (existingCust) {
+        finalCustId = existingCust.id;
+        finalCustName = existingCust.companyname;
+      } else if (Number(trimmedCust)) {
+        finalCustId = Number(trimmedCust);
+      } else {
+        finalCustName = trimmedCust;
+      }
+
+      const resolvedItems = itemsToSave.map((it) => {
+        const trimmedProd = String(it.product_id).trim();
+        const existingProd = products.find(
+          (p) => String(p.id) === trimmedProd || p.productname?.toLowerCase().trim() === trimmedProd.toLowerCase()
+        );
+        return {
+          product_id: existingProd ? existingProd.id : (Number(trimmedProd) || null),
+          productname: existingProd ? existingProd.productname : (it.productname || trimmedProd),
+          description: it.description || '',
+          rate: Number(it.rate) || 0,
+          quantity: Number(it.quantity) || 1,
+          total: Number(((Number(it.rate) || 0) * (Number(it.quantity) || 1)).toFixed(2)),
+        };
+      });
+
+      const payload = {
+        quotation_no: quotationNo.trim(),
+        quotation_date: quotationDate,
+        customer_id: finalCustId,
+        companyname: finalCustName,
+        customer_contact: customerContact,
+        address: customerAddress,
+        items: resolvedItems,
+        sub_amount: resolvedItems.reduce((sum, it) => sum + it.total, 0),
+        notes: notes.trim(),
+      };
+
       if (isEdit) {
         await quotationsApi.update(id, payload);
-        toast.success(`Quotation ${quotationNo} updated`);
-        navigate(`/estimates/${id}`);
+        toast.success(`Quotation #${payload.quotation_no} updated`);
       } else {
-        const res = await quotationsApi.create(payload);
-        toast.success(`Quotation ${res.data.quotation_no} created`);
-        navigate(`/estimates/${res.data.id}`);
+        await quotationsApi.create(payload);
+        toast.success(`Quotation #${payload.quotation_no} created`);
       }
+      navigate('/estimates');
     } catch (err) {
-      toast.error(errorMessage(err, 'Failed to save quotation'));
+      const msg = errorMessage(err, 'Could not save this quotation');
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -162,49 +242,83 @@ export default function AddQuotation() {
 
   if (loading) {
     return (
-      <div style={{ padding: '60px 0', textAlign: 'center', color: 'var(--muted)' }}>
-        <SpinnerIcon size={30} />
-        <div style={{ marginTop: 10 }}>Loading form...</div>
+      <div>
+        <div className="page-header">
+          <h1>{isEdit ? 'Edit Quotation' : 'Add Quotation'}</h1>
+        </div>
+        <div className="card" style={{ display: 'grid', gap: 16 }}>
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="skeleton" style={{ height: 44 }} />
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ maxWidth: 960, margin: '0 auto', paddingBottom: 60 }}>
-      <div className="page-header" style={{ marginBottom: 20 }}>
+    <div>
+      <div className="page-header">
         <div>
-          <div className="eyebrow">
-            <Link to="/estimates" style={{ color: 'inherit', textDecoration: 'none' }}>
-              Estimates / Quotation
-            </Link>
-          </div>
-          <h1>{isEdit ? 'Edit Quotation' : 'Add Official Quotation'}</h1>
+          <div className="eyebrow">Quotation</div>
+          <h1>{isEdit ? `Edit Quotation #${quotationNo}` : 'Add Quotation'}</h1>
         </div>
+        <button className="btn btn-secondary" type="button" onClick={() => navigate('/estimates')}>
+          Back to list
+        </button>
       </div>
 
+      {error && <div className="login-error" style={{ marginBottom: 18 }}>{error}</div>}
+
       <form onSubmit={handleSubmit}>
-        {/* Customer & Quote Header Details */}
-        <div className="card" style={{ padding: 28, marginBottom: 24, borderRadius: 14 }}>
-          <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 18, color: 'var(--purple-brand)' }}>
-            Header &amp; Client Information
-          </h3>
+        <div className="card">
+          <div className="card-head" style={{ marginBottom: 18 }}>
+            <div>
+              <div className="card-title">Quotation details</div>
+            </div>
+          </div>
 
           <div className="form-grid">
             <div className="form-field">
-              <label htmlFor="quotation-no">Quotation Number <span className="req">*</span></label>
+              <label htmlFor="quoteno">
+                Quotation No. <span className="req">*</span>
+              </label>
               <input
-                id="quotation-no"
+                id="quoteno"
                 value={quotationNo}
                 onChange={(e) => setQuotationNo(e.target.value)}
-                placeholder="PD-0926-0001"
                 required
               />
             </div>
 
             <div className="form-field">
-              <label htmlFor="quotation-date">Date <span className="req">*</span></label>
+              <label htmlFor="customer">
+                Customer Name <span className="req">*</span>
+              </label>
+              <SearchableSelect
+                id="customer"
+                options={customerOptions}
+                value={customerId}
+                onChange={handleCustomerChange}
+                placeholder="Select or enter customer…"
+              />
+            </div>
+
+            <div className="form-field">
+              <label htmlFor="contact">Customer Contact No.</label>
               <input
-                id="quotation-date"
+                id="contact"
+                value={customerContact}
+                onChange={(e) => setCustomerContact(e.target.value)}
+                placeholder="Auto-filled from customer"
+              />
+            </div>
+
+            <div className="form-field">
+              <label htmlFor="quotedate">
+                Quotation Date <span className="req">*</span>
+              </label>
+              <input
+                id="quotedate"
                 type="date"
                 value={quotationDate}
                 onChange={(e) => setQuotationDate(e.target.value)}
@@ -213,207 +327,153 @@ export default function AddQuotation() {
             </div>
 
             <div className="form-field" style={{ gridColumn: 'span 2' }}>
-              <label htmlFor="customer-select">Select Customer</label>
-              <SearchableSelect
-                id="customer-select"
-                value={customerId}
-                onChange={handleCustomerSelect}
-                options={customers.map((c) => ({
-                  value: String(c.id),
-                  label: `${c.companyname} ${c.person_incharge ? `(${c.person_incharge})` : ''}`,
-                }))}
-                placeholder="Search existing customer or enter custom details below"
-              />
-            </div>
-
-            <div className="form-field">
-              <label htmlFor="company-name">Company Name <span className="req">*</span></label>
-              <input
-                id="company-name"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="e.g. DJCARGO"
-                required
-              />
-            </div>
-
-            <div className="form-field">
-              <label htmlFor="person-incharge">Person In-Charge</label>
-              <input
-                id="person-incharge"
-                value={personIncharge}
-                onChange={(e) => setPersonIncharge(e.target.value)}
-                placeholder="e.g. Person In-Charge / Contact Person"
-              />
-            </div>
-
-            <div className="form-field">
-              <label htmlFor="mobile-no">Telephone / Phone Number</label>
-              <input
-                id="mobile-no"
-                value={mobileNo}
-                onChange={(e) => setMobileNo(e.target.value)}
-                placeholder="e.g. +65 88359180"
-              />
-            </div>
-
-            <div className="form-field" style={{ gridColumn: 'span 2' }}>
-              <label htmlFor="address">Address</label>
+              <label htmlFor="address">Customer Address</label>
               <input
                 id="address"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="e.g. 71 WOODLANDS INDUSTRIAL PARK E9 #01-19 SINGAPORE 757048"
+                value={customerAddress}
+                onChange={(e) => setCustomerAddress(e.target.value)}
+                placeholder="Auto-filled from customer or enter address"
               />
             </div>
           </div>
         </div>
 
-        {/* Permit Types & Charges Table */}
-        <div className="card" style={{ padding: 28, marginBottom: 24, borderRadius: 14 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div className="card" style={{ marginTop: 20 }}>
+          <div className="card-head" style={{ marginBottom: 16 }}>
             <div>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--purple-brand)' }}>
-                Official Quotation Charges
-              </h3>
-              <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 4 }}>
-                Pre-configured with standard Singapore Permit Declaration services. You can adjust prices or add lines.
-              </p>
+              <div className="card-title">Items</div>
             </div>
-            <button
-              type="button"
-              onClick={addItemRow}
-              className="btn btn-secondary"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}
-            >
-              <PlusIcon size={14} /> Add Line Item
+            <span className="badge badge-info badge-plain">
+              {items.length} {items.length === 1 ? 'row' : 'rows'}
+            </span>
+          </div>
+
+          <div className="line-items table-scroll">
+            <table className="line-items-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '26%', minWidth: 180 }}>Product</th>
+                  <th style={{ minWidth: 140 }}>Description</th>
+                  <th style={{ width: '12%', minWidth: 85 }}>Rate</th>
+                  <th style={{ width: '10%', minWidth: 70 }}>Quantity</th>
+                  <th style={{ width: '13%', minWidth: 95 }}>Total ({currency})</th>
+                  <th style={{ width: 48 }} aria-label="Actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item, idx) => (
+                  <tr key={idx}>
+                    <td>
+                      <SearchableSelect
+                        options={productOptions}
+                        value={item.product_id}
+                        onChange={(val) => updateItem(idx, 'product_id', val)}
+                        placeholder="Select product…"
+                      />
+                    </td>
+                    <td>
+                      <textarea
+                        className="line-item-desc"
+                        rows={Math.max(1, Math.min(5, (item.description || '').split('\n').length))}
+                        value={item.description ?? ''}
+                        placeholder="Enter description..."
+                        onChange={(e) => updateItem(idx, 'description', e.target.value)}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        inputMode="decimal"
+                        value={item.rate}
+                        onChange={(e) => updateItem(idx, 'rate', e.target.value)}
+                        placeholder="0.00"
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        step="1"
+                        min="1"
+                        inputMode="numeric"
+                        value={item.quantity}
+                        onChange={(e) => updateItem(idx, 'quantity', e.target.value)}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        readOnly
+                        className="num"
+                        value={((Number(item.rate) || 0) * (Number(item.quantity) || 0)).toFixed(2)}
+                      />
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="btn-icon icon-delete"
+                        title="Remove row"
+                        onClick={() => removeRow(idx)}
+                        disabled={items.length === 1}
+                      >
+                        <TrashIcon width={15} height={15} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <button type="button" className="add-row-btn" onClick={addRow}>
+            <PlusIcon width={15} height={15} /> Add line item
+          </button>
+
+          <div className="totals-panel">
+            <div className="form-field" style={{ minWidth: 200 }}>
+              <label>Total Amount ({currency})</label>
+              <input readOnly className="num" value={subAmount.toFixed(2)} style={{ fontWeight: 700 }} />
+            </div>
+          </div>
+
+          <div style={{ marginTop: 24 }}>
+            <label htmlFor="notes" style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6 }}>
+              Notes / Terms &amp; Conditions
+            </label>
+            <textarea
+              id="notes"
+              rows={3}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Enter optional payment terms or quotation notes here..."
+              style={{
+                width: '100%',
+                borderRadius: 'var(--r-sm)',
+                border: '1px solid var(--line)',
+                padding: '10px 12px',
+                fontSize: 13,
+                fontFamily: 'inherit',
+                outline: 'none',
+              }}
+            />
+          </div>
+
+          <div className="form-actions" style={{ marginTop: 24 }}>
+            <button className="btn btn-primary" type="submit" disabled={saving}>
+              {saving ? (
+                <>
+                  <SpinnerIcon width={15} height={15} /> Saving…
+                </>
+              ) : isEdit ? (
+                'Save changes'
+              ) : (
+                'Submit Quotation'
+              )}
+            </button>
+            <button className="btn btn-danger" type="button" onClick={resetForm} disabled={saving}>
+              Reset
             </button>
           </div>
-
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
-            <thead>
-              <tr style={{ borderBottom: '2px solid var(--line)', textAlign: 'left', color: 'var(--muted)' }}>
-                <th style={{ padding: '8px 10px', width: '65%' }}>PERMIT TYPE / SERVICE</th>
-                <th style={{ padding: '8px 10px', width: '25%' }}>PERMIT CHARGES</th>
-                <th style={{ padding: '8px 10px', width: '10%', textAlign: 'center' }}>ACTION</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((it, idx) => (
-                <tr key={idx} style={{ borderBottom: '1px solid var(--line-soft)' }}>
-                  <td style={{ padding: '8px 10px' }}>
-                    <input
-                      value={it.type}
-                      onChange={(e) => handleItemChange(idx, 'type', e.target.value)}
-                      placeholder="Permit Type description"
-                      style={{
-                        width: '100%',
-                        padding: '6px 10px',
-                        borderRadius: 6,
-                        border: '1px solid var(--line)',
-                        fontSize: 13,
-                      }}
-                      required
-                    />
-                  </td>
-                  <td style={{ padding: '8px 10px' }}>
-                    <input
-                      value={it.charge}
-                      onChange={(e) => handleItemChange(idx, 'charge', e.target.value)}
-                      placeholder="e.g. 11.00 SGD"
-                      style={{
-                        width: '100%',
-                        padding: '6px 10px',
-                        borderRadius: 6,
-                        border: '1px solid var(--line)',
-                        fontSize: 13,
-                        textAlign: 'center',
-                      }}
-                      required
-                    />
-                  </td>
-                  <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                    <button
-                      type="button"
-                      onClick={() => removeItemRow(idx)}
-                      disabled={items.length <= 1}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: items.length <= 1 ? '#cbd5e1' : '#ef4444',
-                        cursor: items.length <= 1 ? 'not-allowed' : 'pointer',
-                        padding: 4,
-                      }}
-                      title="Remove row"
-                    >
-                      <TrashIcon size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Ops & Operations Details */}
-        <div className="card" style={{ padding: 28, marginBottom: 28, borderRadius: 14 }}>
-          <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16, color: 'var(--purple-brand)' }}>
-            Operations Contact &amp; Hotline Information
-          </h3>
-
-          <div className="form-grid">
-            <div className="form-field">
-              <label htmlFor="ops-email">Ops Team Email</label>
-              <input
-                id="ops-email"
-                value={opsEmail}
-                onChange={(e) => setOpsEmail(e.target.value)}
-                placeholder="Ops@aula.com.sg"
-              />
-            </div>
-
-            <div className="form-field">
-              <label htmlFor="cc-email">CC Email</label>
-              <input
-                id="cc-email"
-                value={ccEmail}
-                onChange={(e) => setCcEmail(e.target.value)}
-                placeholder="Customspermit.sg@gmail.com"
-              />
-            </div>
-
-            <div className="form-field" style={{ gridColumn: 'span 2' }}>
-              <label htmlFor="contacts">24/7 Assistance WhatsApp / Contact</label>
-              <input
-                id="contacts"
-                value={contactNumbers}
-                onChange={(e) => setContactNumbers(e.target.value)}
-                placeholder="+65 8370 1443 & +65 8919 7865 / +65 8322 5509"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-          <Link to="/estimates" className="btn btn-secondary" style={{ padding: '10px 22px' }}>
-            Cancel
-          </Link>
-          <button
-            type="submit"
-            className="btn btn-primary"
-            disabled={saving}
-            style={{
-              padding: '10px 26px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              fontWeight: 600,
-            }}
-          >
-            {saving && <SpinnerIcon size={16} />}
-            {isEdit ? 'Update Quotation' : 'Create Quotation'}
-          </button>
         </div>
       </form>
     </div>

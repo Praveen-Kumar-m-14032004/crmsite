@@ -1,24 +1,7 @@
 const { collection, nextId, now, numericId } = require('../utils/mongo');
-const { buildPdf, createPdfStream, quotationPdfDefinition } = require('../utils/pdf');
+const { createPdfStream, quotationPdfDefinition } = require('../utils/pdf');
 
-const DEFAULT_RATES = [
-  { type: 'EXPORT PERMITS', charge: '11.00 SGD' },
-  { type: 'IMPORT PERMITS', charge: '11.00 SGD' },
-  { type: 'IMPORTER OF THE RECORD', charge: '30.00 SGD' },
-  { type: 'USING PERMIT DECLARATION SFA LICENSE', charge: '25.00 SGD' },
-  { type: 'CERTIFICATE OF ORIGINS', charge: '50.00 SGD' },
-  { type: 'PERMIT AMENDMENTS', charge: '0.50 SGD' },
-  { type: 'CANCELLATION/REJECTION', charge: '0.50 SGD' },
-];
-
-const DEFAULT_TURNAROUNDS = [
-  { priority: 'Normal Requests', timing: 'Within 2hrs from time of Request' },
-  { priority: 'Urgent Requests', timing: 'Within 60mins of Request' },
-  { priority: 'Super Urgent Requests', timing: 'Within 30 mins of Request' },
-  { priority: 'Tier1/Control countries/Other Controlling Agencies', timing: 'Depending upon the Customs queue' },
-];
-
-const SORTABLE = ['quotation_no', 'companyname', 'mobile_no', 'quotation_date', 'created_at', 'id'];
+const SORTABLE = ['quotation_no', 'companyname', 'mobile_no', 'quotation_date', 'sub_amount', 'created_at', 'id'];
 
 function findFilter(param) {
   if (!param) return { id: -1 };
@@ -40,7 +23,7 @@ async function list(req, res) {
 
   const filter = search
     ? {
-        $or: ['quotation_no', 'companyname', 'person_incharge', 'mobile_no'].map((field) => ({
+        $or: ['quotation_no', 'companyname', 'person_incharge', 'mobile_no', 'customer_contact'].map((field) => ({
           [field]: { $regex: search, $options: 'i' },
         })),
       }
@@ -69,7 +52,7 @@ async function nextNumber(_req, res) {
   const d = new Date();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const yy = String(d.getFullYear()).slice(-2);
-  const prefix = `PD-${mm}${yy}-`;
+  const prefix = `Q-${mm}${yy}-`;
 
   const last = await collection('quotations')
     .find({ quotation_no: { $regex: `^${prefix}` } })
@@ -96,24 +79,22 @@ async function create(req, res) {
     address,
     person_incharge,
     mobile_no,
+    customer_contact,
     quotation_date,
-    items,
-    turnarounds,
-    ops_email,
-    cc_email,
-    contact_numbers,
+    items = [],
+    notes,
   } = req.body;
 
   if (!companyname || !String(companyname).trim()) {
     return res.status(400).json({ message: 'Company name is required' });
   }
 
-  let finalNumber = quotation_no;
+  let finalNumber = quotation_no ? String(quotation_no).trim() : '';
   if (!finalNumber) {
     const d = new Date();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
     const yy = String(d.getFullYear()).slice(-2);
-    const prefix = `PD-${mm}${yy}-`;
+    const prefix = `Q-${mm}${yy}-`;
     const last = await collection('quotations')
       .find({ quotation_no: { $regex: `^${prefix}` } })
       .sort({ quotation_no: -1 })
@@ -128,6 +109,25 @@ async function create(req, res) {
     finalNumber = `${prefix}${String(nextSeq).padStart(4, '0')}`;
   }
 
+  // Calculate items and total sub_amount
+  const cleanItems = (Array.isArray(items) ? items : [])
+    .filter((it) => it && (it.product_id || it.productname || it.description || Number(it.rate) > 0))
+    .map((it) => {
+      const rate = Number(it.rate) || 0;
+      const quantity = Number(it.quantity) || 1;
+      const total = Number((rate * quantity).toFixed(2));
+      return {
+        product_id: it.product_id || null,
+        productname: it.productname || '',
+        description: it.description || '',
+        rate,
+        quantity,
+        total,
+      };
+    });
+
+  const sub_amount = cleanItems.reduce((sum, it) => sum + it.total, 0);
+
   const id = await nextId('quotations');
   const doc = {
     id,
@@ -136,13 +136,12 @@ async function create(req, res) {
     companyname: String(companyname).trim(),
     address: address ? String(address).trim() : '',
     person_incharge: person_incharge ? String(person_incharge).trim() : '',
-    mobile_no: mobile_no ? String(mobile_no).trim() : '',
+    mobile_no: mobile_no || customer_contact || '',
+    customer_contact: customer_contact || mobile_no || '',
     quotation_date: quotation_date || new Date().toISOString().slice(0, 10),
-    items: Array.isArray(items) && items.length > 0 ? items : DEFAULT_RATES,
-    turnarounds: Array.isArray(turnarounds) && turnarounds.length > 0 ? turnarounds : DEFAULT_TURNAROUNDS,
-    ops_email: ops_email || 'Ops@aula.com.sg',
-    cc_email: cc_email || 'Customspermit.sg@gmail.com',
-    contact_numbers: contact_numbers || '+65 8370 1443 & +65 8919 7865 / +65 8322 5509',
+    items: cleanItems,
+    sub_amount: Number(sub_amount.toFixed(2)),
+    notes: notes || '',
     created_at: now(),
     updated_at: now(),
   };
@@ -152,9 +151,6 @@ async function create(req, res) {
 }
 
 async function update(req, res) {
-  const id = numericId(req.params.id);
-  if (!id) return res.status(400).json({ message: 'Invalid quotation ID' });
-
   const {
     quotation_no,
     customer_id,
@@ -162,34 +158,49 @@ async function update(req, res) {
     address,
     person_incharge,
     mobile_no,
+    customer_contact,
     quotation_date,
     items,
-    turnarounds,
-    ops_email,
-    cc_email,
-    contact_numbers,
+    notes,
   } = req.body;
 
   if (!companyname || !String(companyname).trim()) {
     return res.status(400).json({ message: 'Company name is required' });
   }
 
+  const cleanItems = (Array.isArray(items) ? items : [])
+    .filter((it) => it && (it.product_id || it.productname || it.description || Number(it.rate) > 0))
+    .map((it) => {
+      const rate = Number(it.rate) || 0;
+      const quantity = Number(it.quantity) || 1;
+      const total = Number((rate * quantity).toFixed(2));
+      return {
+        product_id: it.product_id || null,
+        productname: it.productname || '',
+        description: it.description || '',
+        rate,
+        quantity,
+        total,
+      };
+    });
+
+  const sub_amount = cleanItems.reduce((sum, it) => sum + it.total, 0);
+
   const updateFields = {
     companyname: String(companyname).trim(),
     address: address ? String(address).trim() : '',
     person_incharge: person_incharge ? String(person_incharge).trim() : '',
-    mobile_no: mobile_no ? String(mobile_no).trim() : '',
+    mobile_no: mobile_no || customer_contact || '',
+    customer_contact: customer_contact || mobile_no || '',
     quotation_date: quotation_date || new Date().toISOString().slice(0, 10),
+    items: cleanItems,
+    sub_amount: Number(sub_amount.toFixed(2)),
+    notes: notes || '',
     updated_at: now(),
   };
 
-  if (quotation_no) updateFields.quotation_no = quotation_no;
+  if (quotation_no) updateFields.quotation_no = String(quotation_no).trim();
   if (customer_id !== undefined) updateFields.customer_id = customer_id ? numericId(customer_id) : null;
-  if (Array.isArray(items)) updateFields.items = items;
-  if (Array.isArray(turnarounds)) updateFields.turnarounds = turnarounds;
-  if (ops_email) updateFields.ops_email = ops_email;
-  if (cc_email) updateFields.cc_email = cc_email;
-  if (contact_numbers) updateFields.contact_numbers = contact_numbers;
 
   const result = await collection('quotations').findOneAndUpdate(
     findFilter(req.params.id),
@@ -219,7 +230,7 @@ async function getPdf(req, res) {
   if (!quotation) return res.status(404).json({ message: 'Quotation not found' });
 
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="quotation-${quotation.quotation_no || id}.pdf"`);
+  res.setHeader('Content-Disposition', `inline; filename="quotation-${quotation.quotation_no || quotation.id}.pdf"`);
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
 
   try {

@@ -642,232 +642,196 @@ function reportPdfDefinition(rows, filters, summary) {
   };
 }
 
-function quotationPdfDefinition(quotation = {}, company = {}) {
-  const quoteDate = formatDate(quotation.quotation_date || quotation.date || new Date());
-  const quoteNo = quotation.quotation_no || 'PD-0926-0001';
+function quotationPdfDefinition(quotation = {}, settings = {}) {
+  const currency = settings.default_currency || 'SGD';
+  const uenNumber = settings.uen || '';
+  const rawItems = Array.isArray(quotation.items) ? quotation.items : [];
+  const sp = getSpacing(rawItems);
 
-  const defaultRates = [
-    { type: 'EXPORT PERMITS', charge: '11.00 SGD' },
-    { type: 'IMPORT PERMITS', charge: '11.00 SGD' },
-    { type: 'IMPORTER OF THE RECORD', charge: '30.00 SGD' },
-    { type: 'USING PERMIT DECLARATION SFA LICENSE', charge: '25.00 SGD' },
-    { type: 'CERTIFICATE OF ORIGINS', charge: '50.00 SGD' },
-    { type: 'PERMIT AMENDMENTS', charge: '0.50 SGD' },
-    { type: 'CANCELLATION/REJECTION', charge: '0.50 SGD' },
+  const rawQuoteNo = String(quotation.quotation_no || '');
+  const formattedQuoteNo = rawQuoteNo.startsWith('#')
+    ? `Quotation ${rawQuoteNo}`
+    : `Quotation #${rawQuoteNo}`;
+
+  const itemRows = rawItems.map((item, idx) => [
+    { text: String(idx + 1), style: 'cell', alignment: 'center' },
+    { text: formatCellText(item.productname || item.type || '').toUpperCase(), style: 'cell', alignment: 'left' },
+    { text: formatCellText(item.description || ''), style: 'cell', alignment: 'left' },
+    { text: money(item.rate), style: 'cell', alignment: 'left' },
+    { text: String(Number(item.quantity || 1)), style: 'cell', alignment: 'center' },
+    { text: money(item.total || (Number(item.rate || 0) * Number(item.quantity || 1))), style: 'cell', alignment: 'right' },
+  ]);
+
+  const fromLines = [
+    { text: settings.company_name || 'Permit Declaration', style: 'partyName' },
   ];
+  if (settings.address) {
+    fromLines.push({ text: settings.address, style: 'partyLine' });
+  }
+  const telLine = [
+    settings.tel ? `Tel: ${settings.tel}` : null,
+    settings.mobile ? `HP: ${settings.mobile}` : null,
+  ].filter(Boolean).join(' | ');
+  if (telLine) fromLines.push({ text: telLine, style: 'partyLine' });
+  if (settings.email) fromLines.push({ text: `Email: ${settings.email}`, style: 'partyLine' });
+  if (settings.website) fromLines.push({ text: settings.website, style: 'partyLine' });
+  if (settings.contact_no) fromLines.push({ text: `Contact: ${settings.contact_no}`, style: 'partyLine' });
 
-  const items = quotation.items && quotation.items.length > 0 ? quotation.items : defaultRates;
-
-  const defaultTurnarounds = [
-    { priority: 'Normal Requests', timing: 'Within 2hrs from time of Request' },
-    { priority: 'Urgent Requests', timing: 'Within 60mins of Request' },
-    { priority: 'Super Urgent Requests', timing: 'Within 30 mins of Request' },
-    { priority: 'Tier1/Control countries/Other Controlling Agencies', timing: 'Depending upon the Customs queue' },
-  ];
-
-  const turnarounds = quotation.turnarounds && quotation.turnarounds.length > 0 ? quotation.turnarounds : defaultTurnarounds;
-
-  const opsEmail = quotation.ops_email || company.email || 'Ops@aula.com.sg';
-  const ccEmail = quotation.cc_email || 'Customspermit.sg@gmail.com';
-  const contacts = quotation.contact_numbers || '+65 8370 1443 & +65 8919 7865 / +65 8322 5509';
+  const subTotal = Number(quotation.sub_amount || rawItems.reduce((sum, it) => sum + (Number(it.total) || (Number(it.rate || 0) * Number(it.quantity || 1))), 0));
 
   return {
     pageSize: 'A4',
-    pageMargins: [36, 26, 36, 26],
+    pageMargins: [40, 35, 40, 45],
+    background: (_currentPage, pageSize) => {
+      if (logoBase64) {
+        return [
+          {
+            image: logoBase64,
+            width: 320,
+            opacity: 0.07,
+            absolutePosition: {
+              x: (pageSize.width - 320) / 2,
+              y: 290,
+            },
+          },
+        ];
+      }
+      return null;
+    },
+    footer: () => ({
+      text: 'This is a system generated quotation no signature needed.',
+      style: 'systemNotice',
+      alignment: 'center',
+      margin: [0, 15, 0, 0],
+    }),
     content: [
-      // Top Header: Logo on left, Date & Quotation No on right
+      /* Header: Logo left, Quotation details right */
+      {
+        columns: [
+          {
+            width: 360,
+            stack: [logoBlock()],
+          },
+          {
+            width: 155,
+            stack: [
+              ...(uenNumber ? [{ text: `UEN: ${uenNumber}`, style: 'dateLine', alignment: 'right' }] : []),
+              { text: `Date: ${formatDate(quotation.quotation_date || quotation.created_at)}`, style: 'dateLine', alignment: 'right' },
+              { text: formattedQuoteNo, style: 'invoiceNo', alignment: 'right' },
+            ],
+          },
+        ],
+        margin: [0, 0, 0, sp.headerBottomMargin],
+      },
+
+      /* From & To Section */
+      {
+        columns: [
+          {
+            width: 295,
+            stack: [
+              { text: 'From:', style: 'partyLabel' },
+              ...fromLines,
+            ],
+          },
+          {
+            width: 220,
+            stack: [
+              { text: `To: ${quotation.companyname || ''}`, style: 'partyLabel' },
+              ...(quotation.person_incharge ? [{ text: `Attn: ${quotation.person_incharge}`, style: 'partyName', margin: [0, 4, 0, 2] }] : []),
+              ...(quotation.address ? [{ text: `Address: ${quotation.address}`, style: 'partyLine' }] : []),
+              ...(quotation.customer_contact || quotation.mobile_no ? [{ text: `Phone: ${quotation.customer_contact || quotation.mobile_no}`, style: 'partyLine' }] : []),
+            ],
+          },
+        ],
+        margin: [0, 0, 0, sp.fromToBottomMargin],
+      },
+
+      /* Items Table with Purple Header */
+      {
+        table: {
+          headerRows: 1,
+          dontBreakRows: true,
+          widths: [20, 130, '*', 65, 35, 75],
+          body: [
+            [
+              { text: '#', style: 'th', color: '#ffffff', bold: true, alignment: 'center' },
+              { text: 'Product Name', style: 'th', color: '#ffffff', bold: true, alignment: 'left' },
+              { text: 'Description', style: 'th', color: '#ffffff', bold: true, alignment: 'left' },
+              { text: `Unit Cost ${currency}`, style: 'th', color: '#ffffff', bold: true, alignment: 'left' },
+              { text: 'Qty', style: 'th', color: '#ffffff', bold: true, alignment: 'center' },
+              { text: `Total ${currency}`, style: 'th', color: '#ffffff', bold: true, alignment: 'right' },
+            ],
+            ...(itemRows.length > 0 ? itemRows : [[
+              { text: '1', style: 'cell', alignment: 'center' },
+              { text: '—', style: 'cell', alignment: 'left' },
+              { text: '—', style: 'cell', alignment: 'left' },
+              { text: '0.00', style: 'cell', alignment: 'left' },
+              { text: '1', style: 'cell', alignment: 'center' },
+              { text: '0.00', style: 'cell', alignment: 'right' },
+            ]]),
+          ],
+        },
+        layout: {
+          fillColor: (rowIndex) => (rowIndex === 0 ? PURPLE : null),
+          hLineWidth: () => 0.5,
+          vLineWidth: () => 0.5,
+          hLineColor: () => '#e5e7eb',
+          vLineColor: () => '#e5e7eb',
+          paddingLeft: () => 6,
+          paddingRight: () => 6,
+          paddingTop: () => sp.tablePaddingV,
+          paddingBottom: () => sp.tablePaddingV,
+        },
+        margin: [0, 0, 0, 14],
+      },
+
+      /* Total Box */
       {
         columns: [
           {
             width: '*',
-            stack: [logoBlock()],
+            stack: quotation.notes ? [
+              { text: 'Notes / Terms:', style: 'partyLabel' },
+              { text: quotation.notes, style: 'partyLine', margin: [0, 2, 0, 0] },
+            ] : [],
           },
           {
-            width: 'auto',
-            stack: [
-              { text: `DATE : ${quoteDate}`, bold: true, fontSize: 9, alignment: 'right' },
-              { text: `Quotaion No : ${quoteNo}`, bold: true, fontSize: 9, alignment: 'right', margin: [0, 3, 0, 0] },
-            ],
+            width: 190,
+            table: {
+              widths: ['*'],
+              body: [
+                [
+                  {
+                    stack: [
+                      {
+                        columns: [
+                          { text: 'Total Amount:', style: 'totalLabel' },
+                          { text: `${currency} ${money(subTotal)}`, style: 'totalValue', alignment: 'right' },
+                        ],
+                      },
+                    ],
+                    fillColor: '#f9fafb',
+                    margin: [8, 6, 8, 6],
+                  },
+                ],
+              ],
+            },
+            layout: 'noBorders',
           },
         ],
-        margin: [0, 0, 0, 10],
+        margin: [0, 6, 0, sp.footerTopMargin || 40],
       },
 
-      // Customer Info
-      {
-        stack: [
-          { text: quotation.companyname || 'DJCARGO', bold: true, fontSize: 10 },
-          { text: `Address : ${quotation.address || '71 WOODLANDS INDUSTRIAL PARK E9 #01-19 SINGAPORE 757048'}`, fontSize: 8.5, margin: [0, 3, 0, 0] },
-          {
-            columns: [
-              { text: `Person Incharge : ${quotation.person_incharge || 'Person In-Charge'}`, width: 'auto', fontSize: 8.5 },
-            ],
-            margin: [0, 2, 0, 0],
-          },
-          { text: `Tele : ${quotation.mobile_no || quotation.tele || '+65 88359180'}`, fontSize: 8.5, margin: [0, 2, 0, 0] },
-        ],
-        margin: [0, 0, 0, 10],
-      },
-
-      // Official Quotation Title
-      {
-        text: 'OFFICIAL QUOTATION FOR PERMIT DECLARATIONS',
-        bold: true,
-        fontSize: 10,
-        alignment: 'center',
-        margin: [0, 0, 0, 6],
-      },
-
-      // Table 1: Permit Types & Charges
-      {
-        table: {
-          headerRows: 1,
-          widths: ['*', 130],
-          body: [
-            [
-              { text: 'PERMIT TYPES', bold: true, fontSize: 8.5, alignment: 'center', fillColor: '#f8f9fa' },
-              { text: 'PERMIT CHARGES', bold: true, fontSize: 8.5, alignment: 'center', fillColor: '#f8f9fa' },
-            ],
-            ...items.map((it) => [
-              { text: it.type || it.productname || '', fontSize: 8, margin: [6, 2.5, 6, 2.5] },
-              { text: it.charge || `${Number(it.rate || 0).toFixed(2)} SGD`, fontSize: 8, alignment: 'center', margin: [4, 2.5, 4, 2.5] },
-            ]),
-          ],
-        },
-        layout: {
-          hLineWidth: () => 0.65,
-          vLineWidth: () => 0.65,
-          hLineColor: () => '#444444',
-          vLineColor: () => '#444444',
-        },
-        margin: [0, 0, 0, 6],
-      },
-
-      // Item Cost Note
-      {
-        stack: [
-          { text: 'Item Cost :', bold: true, fontSize: 8.5 },
-          { text: '1st to 10th items No Charges', fontSize: 8, margin: [0, 1, 0, 0] },
-          {
-            text: [
-              { text: 'From 11th items onwards additional charge ', fontSize: 8 },
-              { text: 'SGD 0.50 Cents per line item', bold: true, fontSize: 8 },
-            ],
-            margin: [0, 1, 0, 0],
-          },
-        ],
-        margin: [0, 0, 0, 8],
-      },
-
-      // Turnaround Time Title
-      {
-        text: '(PERMIT TURN-AROUND TIME)',
-        bold: true,
-        fontSize: 9,
-        alignment: 'center',
-        margin: [0, 0, 0, 5],
-      },
-
-      // Table 2: Priority & Timings
-      {
-        table: {
-          headerRows: 1,
-          widths: ['42%', '58%'],
-          body: [
-            [
-              { text: 'Priority :', bold: true, fontSize: 8.5, alignment: 'center', fillColor: '#f8f9fa' },
-              { text: 'Permit Returning Timings :', bold: true, fontSize: 8.5, alignment: 'center', fillColor: '#f8f9fa' },
-            ],
-            ...turnarounds.map((t) => [
-              { text: t.priority, fontSize: 7.8, margin: [6, 2.2, 6, 2.2] },
-              { text: t.timing, fontSize: 7.8, alignment: 'center', margin: [4, 2.2, 4, 2.2] },
-            ]),
-          ],
-        },
-        layout: {
-          hLineWidth: () => 0.65,
-          vLineWidth: () => 0.65,
-          hLineColor: () => '#444444',
-          vLineColor: () => '#444444',
-        },
-        margin: [0, 0, 0, 7],
-      },
-
-      // Procedures
-      {
-        stack: [
-          { text: 'Procedures :', bold: true, fontSize: 8.5 },
-          { text: 'To facilitate the customs permit application, kindly provide the following documents:', fontSize: 7.8, margin: [0, 1.5, 0, 0] },
-          { text: '. BL COPY / AWB COPY / Commercial Invoice / Packing List / NOA / BKG Form', fontSize: 7.8, margin: [0, 1.5, 0, 0] },
-          {
-            text: [
-              { text: 'Send Your Permit Request To Our Ops Team : ', bold: true, fontSize: 7.8 },
-              { text: `Email: ${opsEmail} | CC: ${ccEmail}`, bold: true, fontSize: 7.8 },
-            ],
-            margin: [0, 1.5, 0, 0],
-          },
-          { text: 'Upon receipt of the required documents, our ops team will process your permit application promptly. Approved permit(s) will be forwarded to your email upon successful approval by Singapore Customs.', fontSize: 7.8, margin: [0, 1.5, 0, 0] },
-        ],
-        margin: [0, 0, 0, 6],
-      },
-
-      // Operating Hours
-      {
-        stack: [
-          { text: 'Operating Hours :', bold: true, fontSize: 8.5 },
-          {
-            text: [
-              { text: '24 Hours | 7 Days a Week | Including Public Holidays at ', fontSize: 7.8 },
-              { text: 'NO EXTRA COST', bold: true, fontSize: 7.8 },
-            ],
-            margin: [0, 1.5, 0, 0],
-          },
-          { text: 'We provide 24/7 Customs Permit Declaration Services to support your import and export operations at any time.', fontSize: 7.8, margin: [0, 1.5, 0, 0] },
-          {
-            text: [
-              { text: '24/7 Assistance WhatsApp / Contact: ', bold: true, fontSize: 7.8 },
-              { text: contacts, bold: true, fontSize: 7.8 },
-            ],
-            margin: [0, 1.5, 0, 0],
-          },
-          {
-            text: [
-              { text: 'Express Permit Processing : ', bold: true, fontSize: 7.8 },
-              { text: 'Additional SGD 10.00 per permit.', fontSize: 7.8 },
-            ],
-            margin: [0, 1.5, 0, 0],
-          },
-        ],
-        margin: [0, 0, 0, 6],
-      },
-
-      // Terms & Conditions
-      {
-        stack: [
-          { text: 'Terms & Conditions :', bold: true, fontSize: 8.5 },
-          { text: '. Payment for Declaration services shall be made within 7 days from the invoice date.', fontSize: 7.6, margin: [0, 1.2, 0, 0] },
-          { text: ". Under our GIRO arrangement with Singapore Customs, all applicable GST, Customs Duties, and Government charges are deducted directly from our company's GIRO account.", fontSize: 7.6, margin: [0, 1.2, 0, 0] },
-          { text: ". Customers are required to transfer the applicable GST and DUTY charges to our company's designated UOB bank account before permit submission and approval.", fontSize: 7.6, margin: [0, 1.2, 0, 0] },
-          { text: '. Permit application will be processed for approval only after the GST payment has been received.', fontSize: 7.6, margin: [0, 1.2, 0, 0] },
-          { text: '. Additional charges may apply for permit amendments, cancellations, controlled goods, licence applications, or other special customs requirements.', fontSize: 7.6, margin: [0, 1.2, 0, 0] },
-          { text: '. Unless otherwise stated, this quotation is valid for 10 days from the date of issue.', fontSize: 7.6, margin: [0, 1.2, 0, 0] },
-          { text: 'Thank you for choosing Permit Declaration Services. We look forward to serving you with fast, reliable, and professional support 24/7.', fontSize: 7.6, margin: [0, 2, 0, 0] },
-        ],
-        margin: [0, 0, 0, 10],
-      },
-
-      // Sign-off block (clean, no specific CEO name per user's feedback)
+      /* Authorized Signature block */
       {
         columns: [
           { width: '*', text: '' },
           {
-            width: 220,
-            alignment: 'right',
+            width: 200,
             stack: [
-              { text: 'THANKS & BEST REGARDS', bold: true, fontSize: 8.5, alignment: 'right' },
-              { text: 'YOURS FAITHFULLY', fontSize: 8, alignment: 'right', margin: [0, 14, 0, 18] },
-              { text: '.......................................................', color: '#999999', fontSize: 8, alignment: 'right' },
-              { text: '(AUTHORISED SIGNATURE)', bold: true, fontSize: 8, alignment: 'right', margin: [0, 2, 0, 0] },
+              { text: '.......................................................', color: '#999999', alignment: 'right' },
+              { text: '(AUTHORISED SIGNATURE)', bold: true, fontSize: 8, alignment: 'right', margin: [0, 4, 0, 0] },
             ],
           },
         ],
@@ -875,8 +839,18 @@ function quotationPdfDefinition(quotation = {}, company = {}) {
     ],
     styles: {
       wordmark: { fontSize: 13, bold: true, color: PURPLE, lineHeight: 1 },
+      invoiceNo: { fontSize: 13, bold: true, color: PURPLE },
+      dateLine: { fontSize: 9, color: INK },
+      partyLabel: { fontSize: 9, bold: true, color: PURPLE },
+      partyName: { fontSize: 9.5, bold: true, color: INK },
+      partyLine: { fontSize: 8.5, color: INK },
+      th: { fontSize: 8.5, color: '#ffffff', bold: true },
+      cell: { fontSize: 8.5, color: INK },
+      totalLabel: { fontSize: 9.5, bold: true, color: INK },
+      totalValue: { fontSize: 11, bold: true, color: PURPLE },
+      systemNotice: { fontSize: 9, bold: true, color: MUTED, italics: true },
     },
-    defaultStyle: { font: 'Lato', fontSize: 8, color: INK },
+    defaultStyle: { font: 'Lato', fontSize: 8.5, color: INK },
   };
 }
 

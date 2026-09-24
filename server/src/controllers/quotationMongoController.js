@@ -1,5 +1,34 @@
 const { collection, nextId, now, numericId } = require('../utils/mongo');
-const { createPdfStream, quotationPdfDefinition } = require('../utils/pdf');
+const { buildPdf, createPdfStream, quotationPdfDefinition } = require('../utils/pdf');
+const { cached, invalidate } = require('../utils/cache');
+
+/* ---- LRU PDF buffer cache (same pattern as invoices) ---- */
+const pdfCache = new Map();
+const MAX_CACHE = 200;
+const SETTINGS_TTL = 300_000;
+
+function lruGet(key) {
+  const val = pdfCache.get(key);
+  if (val !== undefined) {
+    pdfCache.delete(key);
+    pdfCache.set(key, val);
+  }
+  return val;
+}
+
+function lruSet(key, val) {
+  if (pdfCache.size >= MAX_CACHE) {
+    const oldest = pdfCache.keys().next().value;
+    pdfCache.delete(oldest);
+  }
+  pdfCache.set(key, val);
+}
+
+function getSettings() {
+  return cached('quotation:companySettings', SETTINGS_TTL, async () =>
+    (await collection('company_settings').findOne({})) || {}
+  );
+}
 
 const SORTABLE = ['quotation_no', 'companyname', 'mobile_no', 'quotation_date', 'sub_amount', 'created_at', 'id'];
 
@@ -222,21 +251,28 @@ async function remove(req, res) {
 
 async function getPdf(req, res) {
   const filter = findFilter(req.params.id);
-  const [quotation, company] = await Promise.all([
-    collection('quotations').findOne(filter),
-    collection('company_settings').findOne({}),
-  ]);
-
+  const quotation = await collection('quotations').findOne(filter);
   if (!quotation) return res.status(404).json({ message: 'Quotation not found' });
+
+  const cacheKey = `q:${quotation._id}:${quotation.updated_at || quotation.created_at || ''}`;
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="quotation-${quotation.quotation_no || quotation.id}.pdf"`);
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+
+  // Serve from cache if available
+  let buf = lruGet(cacheKey);
+  if (buf) {
+    res.setHeader('Content-Length', buf.length);
+    return res.end(buf);
+  }
 
   try {
-    const docDef = quotationPdfDefinition(quotation, company || {});
-    const stream = createPdfStream(docDef);
-    stream.pipe(res);
+    const company = await getSettings();
+    const docDef = quotationPdfDefinition(quotation, company);
+    buf = await buildPdf(docDef);
+    lruSet(cacheKey, buf);
+    res.setHeader('Content-Length', buf.length);
+    res.end(buf);
   } catch (err) {
     console.error('[pdf] Quotation PDF generation failed:', err);
     res.status(500).json({ message: 'Failed to generate PDF' });

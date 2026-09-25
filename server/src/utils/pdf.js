@@ -660,14 +660,49 @@ function quotationPdfDefinition(quotation = {}, settings = {}) {
     pageSize: 'A4',
     pageMargins: [40, 35, 40, 30],
     content: [
-      /* HEADER: Logo + Date left-aligned */
-      logoBlock(),
-      { text: `DATE : ${formatDate(quotation.quotation_date || quotation.created_at)}`, style: 'dateLabel', margin: [0, 12, 0, 0] },
-      { text: `Quotation No : ${quotation.quotation_no || ''}`, style: 'dateLabel', margin: [0, 2, 0, 14] },
+      /* ======== HEADER: Logo left, Date & Quotation No straight to the right ======== */
+      {
+        columns: [
+          {
+            width: '*',
+            stack: [logoBlock()],
+          },
+          {
+            width: 'auto',
+            alignment: 'right',
+            stack: [
+              {
+                text: [
+                  { text: 'DATE : ', bold: true },
+                  { text: formatDate(quotation.quotation_date || quotation.created_at), bold: true },
+                ],
+                style: 'quotationDate',
+                alignment: 'right',
+              },
+              {
+                text: [
+                  { text: 'Quotation No : ', bold: true },
+                  { text: String(quotation.quotation_no || ''), bold: true },
+                ],
+                style: 'quotationNo',
+                alignment: 'right',
+              },
+            ],
+          },
+        ],
+        margin: [0, 0, 0, 18],
+      },
 
       /* CUSTOMER INFO */
       { text: (quotation.companyname || '').toUpperCase(), bold: true, fontSize: 11, margin: [0, 0, 0, 3] },
-      ...(quotation.address ? [{ text: `Address : ${quotation.address}`, fontSize: 9.5, margin: [0, 0, 0, 6] }] : []),
+      ...(quotation.address ? [{
+        text: [
+          { text: 'Address : ', bold: true },
+          { text: quotation.address },
+        ],
+        fontSize: 9.5,
+        margin: [0, 0, 0, 6],
+      }] : []),
       {
         columns: [
           { width: 120, text: 'Person Incharge', bold: true, fontSize: 9.5 },
@@ -790,8 +825,10 @@ function quotationPdfDefinition(quotation = {}, settings = {}) {
     ],
     styles: {
       wordmark: { fontSize: 13, bold: true, color: PURPLE, lineHeight: 1 },
-      dateLabel: { fontSize: 10, bold: true, color: '#1b2a4a' },
-      invoiceNo: { fontSize: 12, bold: true, color: '#1b2a4a' },
+      quotationDate: { fontSize: 12, bold: true, color: '#1b2a4a', margin: [0, 0, 0, 3] },
+      quotationNo: { fontSize: 13.5, bold: true, color: '#1b2a4a' },
+      dateLabel: { fontSize: 12, bold: true, color: '#1b2a4a' },
+      invoiceNo: { fontSize: 13.5, bold: true, color: '#1b2a4a' },
       partyLabel: { fontSize: 9, bold: true, color: PURPLE },
       partyName: { fontSize: 10, bold: true, color: INK },
       partyLine: { fontSize: 9, color: INK },

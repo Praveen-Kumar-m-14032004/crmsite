@@ -96,21 +96,29 @@ export default function QuotationView() {
         borderRadius: 2, ...TS, fontSize: 14.5, lineHeight: 1.7,
       }}>
 
-        {/* HEADER: Logo left, Date & Quotation No below on left */}
-        <div style={{ marginBottom: 20 }}>
-          <img src={logoImg} alt={companyName} style={{ width: 180, height: 'auto', display: 'block', marginBottom: 16 }} />
-          <div style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>
-            DATE : {formatDateDMY(quotation.quotation_date || quotation.created_at)}
+        {/* HEADER: Logo left, Date & Quotation No straight to the right */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+          <div>
+            <img src={logoImg} alt={companyName} style={{ width: 180, height: 'auto', display: 'block' }} />
           </div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: NAVY, marginTop: 3 }}>
-            Quotation No : {quotation.quotation_no}
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: NAVY, letterSpacing: 0.2 }}>
+              DATE : {formatDateDMY(quotation.quotation_date || quotation.created_at)}
+            </div>
+            <div style={{ fontSize: 16.5, fontWeight: 700, color: NAVY, marginTop: 4, letterSpacing: 0.2 }}>
+              Quotation No : {quotation.quotation_no}
+            </div>
           </div>
         </div>
 
         {/* CUSTOMER INFO */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>{quotation.companyname || '—'}</div>
-          {quotation.address && <div style={{ marginBottom: 8 }}>Address : {quotation.address}</div>}
+          {quotation.address && (
+            <div style={{ marginBottom: 8 }}>
+              <strong>Address :</strong> {quotation.address}
+            </div>
+          )}
           <table style={{ borderCollapse: 'collapse', fontSize: 14.5, ...TS }}>
             <tbody>
               <tr>

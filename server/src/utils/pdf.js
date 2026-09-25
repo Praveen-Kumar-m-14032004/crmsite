@@ -793,8 +793,6 @@ function quotationPdfDefinition(quotation = {}, settings = {}) {
         text: [
           { text: 'Send Your Permit Request To Our Ops Team : ' },
           { text: `Email: ${emailAddr}`, bold: true },
-          { text: ' | CC: ' },
-          { text: 'Customspermit.sg@gmail.com', bold: true },
         ],
         fontSize: 9, margin: [0, 0, 0, 3],
       },
@@ -815,23 +813,7 @@ function quotationPdfDefinition(quotation = {}, settings = {}) {
       { text: '  .  Permit application will be processed for approval only after the GST payment has been received.', fontSize: 9, margin: [0, 0, 0, 2] },
       { text: '  .  Additional charges may apply for permit amendments, cancellations, controlled goods, licence applications, or other special customs requirements.', fontSize: 9, margin: [0, 0, 0, 2] },
       { text: '  .  Unless otherwise stated, this quotation is valid for 10 days from the date of issue.', fontSize: 9, margin: [0, 0, 0, 4] },
-      { text: `Thank you for choosing ${companyName} Permit Declaration Services. We look forward to serving you with fast, reliable, and professional support 24/7.`, fontSize: 9, margin: [0, 0, 0, 16] },
-
-      /* SIGNATURE BLOCK */
-
-      /* SIGNATURE LINE */
-      {
-        columns: [
-          { width: '*', text: '' },
-          {
-            width: 220,
-            stack: [
-              { text: '.......................................................', color: '#666666', alignment: 'center' },
-              { text: '(AUTHORISED SIGNATURE)', bold: true, fontSize: 9, alignment: 'center', margin: [0, 4, 0, 0] },
-            ],
-          },
-        ],
-      },
+      { text: `Thank you for choosing ${companyName} Permit Declaration Services. We look forward to serving you with fast, reliable, and professional support 24/7.`, fontSize: 9, margin: [0, 0, 0, 0] },
     ],
     styles: {
       wordmark: { fontSize: 13, bold: true, color: PURPLE, lineHeight: 1 },

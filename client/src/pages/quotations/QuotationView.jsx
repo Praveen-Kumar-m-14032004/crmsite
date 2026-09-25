@@ -195,7 +195,7 @@ export default function QuotationView() {
           <p style={{ margin: '0 0 6px' }}>To facilitate the customs permit application, kindly provide the following documents:</p>
           <p style={{ margin: '0 0 6px', paddingLeft: 16 }}>.&nbsp; BL COPY / AWB COPY / Commercial Invoice / Packing List / NOA / BKG Form</p>
           <p style={{ margin: '0 0 6px' }}>
-            Send Your Permit Request To Our Ops Team : <strong>Email: {company.email || 'Ops@permitdeclaration.sg'}</strong> | CC: <strong>Customspermit.sg@gmail.com</strong>
+            Send Your Permit Request To Our Ops Team : <strong>Email: {company.email || 'Ops@permitdeclaration.sg'}</strong>
           </p>
           <p style={{ margin: '0 0 0' }}>
             Upon receipt of the required documents, our ops team will process your permit application promptly. Approved
@@ -228,14 +228,6 @@ export default function QuotationView() {
           <p style={{ margin: '10px 0 0' }}>
             Thank you for choosing {companyName} Permit Declaration Services. We look forward to serving you with fast, reliable, and professional support 24/7.
           </p>
-        </div>
-
-        {/* SIGNATURE LINE */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 40 }}>
-          <div style={{ textAlign: 'center', minWidth: 240 }}>
-            <div style={{ borderBottom: '1px dotted #666', width: 220, margin: '0 auto 8px' }} />
-            <div style={{ fontWeight: 700, fontSize: 13, color: '#333' }}>(AUTHORISED SIGNATURE)</div>
-          </div>
         </div>
 
         {/* NOTES */}

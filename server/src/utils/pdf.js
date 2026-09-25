@@ -388,7 +388,6 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
           },
           {
             width: 'auto',
-            alignment: 'right',
             stack: [
               {
                 text: [
@@ -396,12 +395,12 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
                   { text: formatDate(invoice.invoice_date), bold: true },
                 ],
                 style: 'dateLine',
-                alignment: 'right',
+                alignment: 'left',
               },
               {
                 text: formattedInvoiceNo,
                 style: 'invoiceNo',
-                alignment: 'right',
+                alignment: 'left',
               },
             ],
           },
@@ -681,7 +680,6 @@ function quotationPdfDefinition(quotation = {}, settings = {}) {
           },
           {
             width: 'auto',
-            alignment: 'right',
             stack: [
               {
                 text: [
@@ -697,7 +695,7 @@ function quotationPdfDefinition(quotation = {}, settings = {}) {
                   { text: String(quotation.quotation_no || ''), bold: true },
                 ],
                 style: 'quotationNo',
-                alignment: 'right',
+                alignment: 'left',
               },
             ],
           },

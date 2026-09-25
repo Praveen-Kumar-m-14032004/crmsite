@@ -101,7 +101,7 @@ export default function QuotationView() {
           <div>
             <img src={logoImg} alt={companyName} style={{ width: 180, height: 'auto', display: 'block' }} />
           </div>
-          <div style={{ textAlign: 'right' }}>
+          <div style={{ textAlign: 'left' }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: NAVY, letterSpacing: 0.2 }}>
               DATE : {formatDateDMY(quotation.quotation_date || quotation.created_at)}
             </div>

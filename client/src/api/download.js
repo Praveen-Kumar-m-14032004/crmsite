@@ -21,29 +21,33 @@ export function cancelBatchPrefetch() {}
 export function invalidatePdfCache() {}
 
 export async function openViaApi(path) {
-  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('pd_token') : null;
-  const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  const apiPath = cleanPath.startsWith('/api') ? cleanPath : `/api${cleanPath}`;
-  const urlWithToken = token
-    ? `${apiPath}${apiPath.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`
-    : apiPath;
+  const cleanPath = path.startsWith('/api') ? path.replace(/^\/api/, '') : path;
 
-  const win = typeof window !== 'undefined' ? window.open(urlWithToken, '_blank') : null;
-  if (!win || win.closed || typeof win.closed === 'undefined') {
+  // Pre-open a tab synchronously within user gesture to avoid popup blockers
+  let win = null;
+  if (typeof window !== 'undefined') {
     try {
-      const res = await api.get(cleanPath, { responseType: 'blob' });
-      const blob = new Blob([res.data], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.target = '_blank';
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      setTimeout(() => window.URL.revokeObjectURL(url), 60000);
-    } catch (err) {
-      throw err;
+      win = window.open('about:blank', '_blank');
+    } catch (_e) {
+      win = null;
     }
+  }
+
+  try {
+    const res = await api.get(cleanPath, { responseType: 'blob' });
+    const blob = new Blob([res.data], { type: 'application/pdf' });
+    const blobUrl = window.URL.createObjectURL(blob);
+
+    if (win && !win.closed) {
+      win.location.href = blobUrl;
+    } else {
+      window.open(blobUrl, '_blank');
+    }
+  } catch (err) {
+    if (win && !win.closed) {
+      win.close();
+    }
+    throw err;
   }
 }
 

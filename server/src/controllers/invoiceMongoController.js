@@ -227,62 +227,39 @@ async function list(req, res) {
 }
 
 async function getInvoiceWithItems(id) {
-  const [invoice] = await collection('invoices').aggregate([
-    { $match: { id } },
-    {
-      $lookup: {
-        from: 'customers',
-        localField: 'customer_id',
-        foreignField: 'id',
-        as: 'customer',
-      },
-    },
-    { $unwind: { path: '$customer', preserveNullAndEmptyArrays: true } },
-    {
-      $lookup: {
-        from: 'invoice_items',
-        let: { invId: '$id' },
-        pipeline: [
-          { $match: { $expr: { $eq: ['$invoice_id', '$$invId'] } } },
-          {
-            $lookup: {
-              from: 'products',
-              localField: 'product_id',
-              foreignField: 'id',
-              as: 'product',
-            },
-          },
-          { $unwind: { path: '$product', preserveNullAndEmptyArrays: true } },
-          {
-            $project: {
-              id: 1,
-              invoice_id: 1,
-              product_id: 1,
-              description: 1,
-              rate: 1,
-              quantity: 1,
-              total: 1,
-              productname: '$product.productname',
-            },
-          },
-        ],
-        as: 'items',
-      },
-    },
-    {
-      $project: {
-        ...projection(),
-        person_incharge: '$customer.person_incharge',
-        customer_address: '$customer.address',
-        customer_mobile: '$customer.mobile_no',
-        items: 1,
-      },
-    },
-  ]).toArray();
-
+  const invoice = await collection('invoices').findOne({ id });
   if (!invoice) return null;
+
+  const [customer, items] = await Promise.all([
+    invoice.customer_id ? collection('customers').findOne({ id: invoice.customer_id }) : null,
+    collection('invoice_items').find({ invoice_id: id }).sort({ id: 1 }).toArray(),
+  ]);
+
+  const pIds = [...new Set(items.map((it) => it.product_id).filter(Boolean))];
+  const products = pIds.length > 0 ? await collection('products').find({ id: { $in: pIds } }).toArray() : [];
+  const prodMap = new Map(products.map((p) => [p.id, p.productname]));
+
+  const enrichedItems = items.map((it) => ({
+    id: it.id,
+    invoice_id: it.invoice_id,
+    product_id: it.product_id,
+    description: it.description,
+    rate: it.rate,
+    quantity: it.quantity,
+    total: it.total,
+    productname: prodMap.get(it.product_id) || '',
+  }));
+
   const normStatus = (invoice.status && String(invoice.status).toLowerCase() === 'pending') ? 'Unpaid' : (invoice.status || 'Unpaid');
-  return { ...invoice, status: normStatus };
+  return {
+    ...invoice,
+    companyname: customer?.companyname || '',
+    person_incharge: customer?.person_incharge || '',
+    customer_address: customer?.address || '',
+    customer_mobile: customer?.mobile_no || '',
+    items: enrichedItems,
+    status: normStatus,
+  };
 }
 
 async function getOne(req, res) {

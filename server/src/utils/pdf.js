@@ -220,8 +220,8 @@ function getSpacing(items) {
   const totalLines = itemsList.reduce((sum, it) => sum + estimateItemLines(it), 0);
 
   const fixed = {
-    dateLineSize: 9,
-    invoiceNoSize: 13,
+    dateLineSize: 11.5,
+    invoiceNoSize: 13.5,
   };
 
   // Determine effective height factor combining row count and description lines
@@ -379,18 +379,30 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
       margin: [0, 15, 0, 0],
     }),
     content: [
-      /* ======== HEADER: Logo left, Date + Invoice # right ======== */
+      /* ======== HEADER: Logo left, Date + Invoice # straight to the right ======== */
       {
         columns: [
           {
-            width: 360,
+            width: '*',
             stack: [logoBlock()],
           },
           {
-            width: 155,
+            width: 'auto',
+            alignment: 'right',
             stack: [
-              { text: `Date: ${formatDate(invoice.invoice_date)}`, style: 'dateLine' },
-              { text: formattedInvoiceNo, style: 'invoiceNo' },
+              {
+                text: [
+                  { text: 'Date : ', bold: true },
+                  { text: formatDate(invoice.invoice_date), bold: true },
+                ],
+                style: 'dateLine',
+                alignment: 'right',
+              },
+              {
+                text: formattedInvoiceNo,
+                style: 'invoiceNo',
+                alignment: 'right',
+              },
             ],
           },
         ],
@@ -509,7 +521,7 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
     /* ======== STYLES (exact match to reference PDF) ======== */
     styles: {
       wordmark: { fontSize: 15.5, bold: true, color: PURPLE, lineHeight: 1 },
-      dateLine: { fontSize: sp.dateLineSize, color: INK, margin: [0, 0, 0, 3] },
+      dateLine: { fontSize: sp.dateLineSize, bold: true, color: INK, margin: [0, 0, 0, 3] },
       invoiceNo: { fontSize: sp.invoiceNoSize, bold: true, color: INK },
 
       partyLabel: { fontSize: sp.fromFontSize, color: INK, bold: false },

@@ -10,6 +10,7 @@ import ConfirmDialog from '../../components/common/ConfirmDialog';
 import { formatDateDMY } from '../../utils/date';
 import {
   EditIcon,
+  EyeIcon,
   PlusIcon,
   PrinterIcon,
   SpinnerIcon,
@@ -117,25 +118,37 @@ export default function ManageQuotation() {
       label: 'Actions',
       align: 'right',
       render: (r) => (
-        <div className="row-actions">
-          <button
-            type="button"
-            className="btn-icon"
-            title="Print Quotation"
-            onClick={() => handlePrint(r)}
-            disabled={printingId === r.id}
-          >
-            {printingId === r.id ? (
-              <SpinnerIcon width={15} height={15} />
-            ) : (
-              <PrinterIcon width={15} height={15} />
-            )}
-          </button>
+        <div className="row-actions" style={{ justifyContent: 'flex-end' }}>
+          {can('quotations.view', 'invoices.view') && (
+            <Link
+              to={`/estimates/${r.id}`}
+              className="btn-icon icon-view"
+              title="View Quotation"
+            >
+              <EyeIcon width={15} height={15} />
+            </Link>
+          )}
+
+          {can('quotations.print', 'invoices.print', 'quotations.view', 'invoices.view') && (
+            <button
+              type="button"
+              className="btn-icon icon-print"
+              title="Print Quotation"
+              onClick={() => handlePrint(r)}
+              disabled={printingId === r.id}
+            >
+              {printingId === r.id ? (
+                <SpinnerIcon width={15} height={15} />
+              ) : (
+                <PrinterIcon width={15} height={15} />
+              )}
+            </button>
+          )}
 
           {can('quotations.edit', 'invoices.edit') && (
             <Link
               to={`/estimates/${r.id}/edit`}
-              className="btn-icon"
+              className="btn-icon icon-edit-orange"
               title="Edit Quotation"
             >
               <EditIcon width={15} height={15} />

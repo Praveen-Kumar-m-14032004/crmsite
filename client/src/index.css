@@ -245,6 +245,11 @@ h4 {
   background: var(--purple-100);
 }
 
+.icon-view {
+  color: var(--purple-700);
+  background: var(--purple-50);
+}
+
 .icon-neutral {
   color: var(--ink-2);
   background: var(--line-soft);
@@ -252,7 +257,13 @@ h4 {
 
 .row-actions {
   display: flex;
+  align-items: center;
   gap: 7px;
+}
+
+td[style*="text-align: right"] .row-actions,
+td[style*="text-align:right"] .row-actions {
+  justify-content: flex-end;
 }
 
 /* ---------------------------------------------------------------
@@ -1133,8 +1144,9 @@ table.datatable th.sortable:hover {
 }
 
 .th-content {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  width: 100%;
   gap: 6px;
   color: #ffffff;
 }

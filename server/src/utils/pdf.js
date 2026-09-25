@@ -689,7 +689,7 @@ function quotationPdfDefinition(quotation = {}, settings = {}) {
                   { text: formatDate(quotation.quotation_date || quotation.created_at), bold: true },
                 ],
                 style: 'quotationDate',
-                alignment: 'right',
+                alignment: 'left',
               },
               {
                 text: [

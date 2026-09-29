@@ -29,7 +29,7 @@ function getTransporter() {
  * Send an email. Throws a friendly error when email is not configured.
  * @returns {Promise<import('nodemailer').SentMessageInfo>}
  */
-async function sendMail({ to, subject, text, html, attachments, replyTo }) {
+async function sendMail({ to, cc, subject, text, html, attachments, replyTo }) {
   const tx = getTransporter();
   if (!tx) {
     const err = new Error('Email is not configured. Set SMTP_USER and SMTP_PASS in the server .env.');
@@ -40,6 +40,7 @@ async function sendMail({ to, subject, text, html, attachments, replyTo }) {
   return tx.sendMail({
     from: `"${fromName}" <${process.env.SMTP_USER}>`,
     to,
+    cc: cc && (Array.isArray(cc) ? cc.length : cc) ? cc : undefined,
     subject,
     text,
     html,

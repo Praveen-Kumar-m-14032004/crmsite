@@ -11,6 +11,7 @@ import { MailIcon, SpinnerIcon } from './Icons';
 export default function EmailInvoiceDialog({ invoice, onClose }) {
   const toast = useToast();
   const [to, setTo] = useState('');
+  const [cc, setCc] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
 
@@ -19,6 +20,7 @@ export default function EmailInvoiceDialog({ invoice, onClose }) {
     let alive = true;
     setLoading(true);
     setTo('');
+    setCc('');
     invoicesApi.get(invoice.id)
       .then((res) => { if (alive) setTo(res.data?.customer_email || ''); })
       .catch(() => {})
@@ -37,10 +39,10 @@ export default function EmailInvoiceDialog({ invoice, onClose }) {
 
   const handleSend = async () => {
     const email = to.trim();
-    if (!email) { toast.error('Enter a recipient email address'); return; }
+    if (!email) { toast.error('Enter at least one recipient email address'); return; }
     setSending(true);
     try {
-      const res = await invoicesApi.emailInvoice(invoice.id, { email });
+      const res = await invoicesApi.emailInvoice(invoice.id, { email, cc: cc.trim() });
       toast.success(res.data?.message || `Invoice emailed to ${email}`);
       onClose(true);
     } catch (err) {
@@ -60,21 +62,33 @@ export default function EmailInvoiceDialog({ invoice, onClose }) {
         </p>
 
         <div className="form-field" style={{ marginTop: 16, textAlign: 'left' }}>
-          <label htmlFor="emailTo">Recipient email</label>
+          <label htmlFor="emailTo">To</label>
           <input
             id="emailTo"
-            type="email"
+            type="text"
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            placeholder={loading ? 'Loading customer email…' : 'name@example.com'}
+            placeholder={loading ? 'Loading customer email…' : 'name@example.com, another@example.com'}
             disabled={loading || sending}
             autoFocus
           />
-          {!loading && !to && (
-            <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 6 }}>
-              No email on file for this customer — enter one to send.
-            </div>
-          )}
+          <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 6 }}>
+            {!loading && !to
+              ? 'No email on file for this customer — enter one to send.'
+              : 'Separate multiple email addresses with commas.'}
+          </div>
+        </div>
+
+        <div className="form-field" style={{ marginTop: 12, textAlign: 'left' }}>
+          <label htmlFor="emailCc">CC <span style={{ color: 'var(--muted)', fontWeight: 400 }}>(optional)</span></label>
+          <input
+            id="emailCc"
+            type="text"
+            value={cc}
+            onChange={(e) => setCc(e.target.value)}
+            placeholder="cc1@example.com, cc2@example.com"
+            disabled={loading || sending}
+          />
         </div>
 
         <div className="form-actions">

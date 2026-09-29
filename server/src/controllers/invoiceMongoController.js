@@ -7,6 +7,15 @@ const { buildInvoiceEmail } = require('../utils/invoiceEmail');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** Split a "a@b.com, c@d.com; e@f.com" string (or array) into a clean list. */
+function parseEmails(raw) {
+  if (Array.isArray(raw)) raw = raw.join(',');
+  return String(raw || '')
+    .split(/[,;\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 const TEN_DAYS_MS = 10 * 24 * 60 * 60 * 1000;
 const TOTAL_TTL_MS = 30_000;
 const TRASH_COUNT_TTL_MS = 30_000;
@@ -641,14 +650,23 @@ async function emailInvoice(req, res) {
   ]);
   if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
 
-  const recipient = String(req.body?.email || invoice.customer_email || '').trim();
-  if (!recipient) {
+  // "To" — one or many addresses; falls back to the customer's email on file.
+  let toList = parseEmails(req.body?.email ?? req.body?.to);
+  if (toList.length === 0) toList = parseEmails(invoice.customer_email);
+  const ccList = parseEmails(req.body?.cc);
+
+  if (toList.length === 0) {
     return res.status(400).json({
       message: `No email address on file for ${invoice.companyname || 'this customer'}. Enter a recipient email.`,
     });
   }
-  if (!EMAIL_RE.test(recipient)) {
-    return res.status(400).json({ message: 'Please enter a valid recipient email address.' });
+  const invalidTo = toList.filter((e) => !EMAIL_RE.test(e));
+  if (invalidTo.length) {
+    return res.status(400).json({ message: `Invalid recipient email: ${invalidTo.join(', ')}` });
+  }
+  const invalidCc = ccList.filter((e) => !EMAIL_RE.test(e));
+  if (invalidCc.length) {
+    return res.status(400).json({ message: `Invalid CC email: ${invalidCc.join(', ')}` });
   }
 
   const buffer = await buildInvoicePdfBuffer(invoice, settings);
@@ -656,7 +674,8 @@ async function emailInvoice(req, res) {
 
   try {
     await sendMail({
-      to: recipient,
+      to: toList,
+      cc: ccList,
       subject,
       text,
       html,
@@ -673,7 +692,8 @@ async function emailInvoice(req, res) {
     return res.status(status).json({ message: err.message || 'Failed to send the email. Please try again.' });
   }
 
-  res.json({ message: `Invoice #${invoice.invoice_no} emailed to ${recipient}`, to: recipient });
+  const summary = toList.join(', ') + (ccList.length ? ` (cc: ${ccList.join(', ')})` : '');
+  res.json({ message: `Invoice #${invoice.invoice_no} emailed to ${summary}`, to: toList, cc: ccList });
 }
 
 module.exports = {

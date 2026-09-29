@@ -32,6 +32,31 @@ function getSettings() {
 
 const SORTABLE = ['quotation_no', 'companyname', 'mobile_no', 'quotation_date', 'sub_amount', 'created_at', 'id'];
 
+/**
+ * Normalize the editable document-content fields from a request body.
+ * Only defined fields are returned, so update() won't clobber stored content
+ * with blanks when the client omits a section.
+ */
+function pickSections(body) {
+  const out = {};
+  if (body.doc_title !== undefined) out.doc_title = String(body.doc_title || '');
+  if (body.item_cost !== undefined) out.item_cost = String(body.item_cost || '');
+  if (body.procedures !== undefined) out.procedures = String(body.procedures || '');
+  if (body.operating_hours !== undefined) out.operating_hours = String(body.operating_hours || '');
+  if (body.closing_note !== undefined) out.closing_note = String(body.closing_note || '');
+  if (body.turnaround !== undefined) {
+    out.turnaround = (Array.isArray(body.turnaround) ? body.turnaround : [])
+      .map((t) => ({ priority: String(t?.priority || '').trim(), timing: String(t?.timing || '').trim() }))
+      .filter((t) => t.priority || t.timing);
+  }
+  if (body.terms !== undefined) {
+    out.terms = (Array.isArray(body.terms) ? body.terms : [])
+      .map((t) => String(t || '').trim())
+      .filter(Boolean);
+  }
+  return out;
+}
+
 function findFilter(param) {
   if (!param) return { id: -1 };
   const num = numericId(param);
@@ -171,6 +196,7 @@ async function create(req, res) {
     items: cleanItems,
     sub_amount: Number(sub_amount.toFixed(2)),
     notes: notes || '',
+    ...pickSections(req.body),
     created_at: now(),
     updated_at: now(),
   };
@@ -225,6 +251,7 @@ async function update(req, res) {
     items: cleanItems,
     sub_amount: Number(sub_amount.toFixed(2)),
     notes: notes || '',
+    ...pickSections(req.body),
     updated_at: now(),
   };
 

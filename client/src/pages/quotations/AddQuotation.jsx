@@ -5,10 +5,22 @@ import { errorMessage, useToast } from '../../hooks/ToastContext';
 import { toDateInputValue } from '../../utils/date';
 import { PlusIcon, SpinnerIcon, TrashIcon } from '../../components/common/Icons';
 import SearchableSelect from '../../components/common/SearchableSelect';
+import { buildDefaultSections, resolveSections } from '../../utils/quotationSections';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const emptyItem = () => ({ product_id: '', productname: '', description: '', rate: '', quantity: 1 });
 const defaultItems = () => Array.from({ length: 4 }, emptyItem);
+const emptyTurn = () => ({ priority: '', timing: '' });
+const sectionTextareaStyle = {
+  width: '100%',
+  borderRadius: 'var(--r-sm)',
+  border: '1px solid var(--line)',
+  padding: '10px 12px',
+  fontSize: 13,
+  fontFamily: 'inherit',
+  outline: 'none',
+  resize: 'vertical',
+};
 
 export default function AddQuotation() {
   const { id } = useParams();
@@ -31,6 +43,8 @@ export default function AddQuotation() {
   const [customerAddress, setCustomerAddress] = useState('');
   const [items, setItems] = useState(defaultItems());
   const [notes, setNotes] = useState('');
+  const [sections, setSections] = useState(() => buildDefaultSections());
+  const [sectionDefaults, setSectionDefaults] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -42,9 +56,18 @@ export default function AddQuotation() {
     ])
       .then(([cRes, pRes, sRes, qRes]) => {
         if (!alive) return;
+        const settings = sRes.data || {};
         setCustomers(cRes.data.data || []);
         setProducts(pRes.data.data || []);
-        setCurrency(sRes.data?.default_currency || 'SGD');
+        setCurrency(settings.default_currency || 'SGD');
+
+        const sectionOpts = {
+          currency: settings.default_currency || 'SGD',
+          companyName: settings.company_name || 'Permit Declaration',
+          email: settings.email || 'Ops@permitdeclaration.sg',
+          contact: settings.mobile || settings.tel || settings.contact_no || '',
+        };
+        setSectionDefaults(sectionOpts);
 
         if (isEdit) {
           const q = qRes.data;
@@ -55,6 +78,7 @@ export default function AddQuotation() {
           setCustomerContact(q.customer_contact || q.mobile_no || '');
           setCustomerAddress(q.address || '');
           setNotes(q.notes || '');
+          setSections(resolveSections(q, sectionOpts));
 
           if (Array.isArray(q.items) && q.items.length) {
             setItems(
@@ -71,6 +95,7 @@ export default function AddQuotation() {
           }
         } else {
           setQuotationNo(qRes.data.quotation_no || '');
+          setSections(buildDefaultSections(sectionOpts));
         }
       })
       .catch((err) => setError(errorMessage(err, 'Could not load quotation form data')))
@@ -146,6 +171,17 @@ export default function AddQuotation() {
   const addRow = () => setItems((prev) => [...prev, emptyItem()]);
   const removeRow = (index) => setItems((prev) => prev.filter((_, i) => i !== index));
 
+  const updateSection = (field, value) => setSections((prev) => ({ ...prev, [field]: value }));
+
+  const updateTurn = (index, field, value) =>
+    setSections((prev) => {
+      const turnaround = prev.turnaround.map((t, i) => (i === index ? { ...t, [field]: value } : t));
+      return { ...prev, turnaround };
+    });
+  const addTurn = () => setSections((prev) => ({ ...prev, turnaround: [...prev.turnaround, emptyTurn()] }));
+  const removeTurn = (index) =>
+    setSections((prev) => ({ ...prev, turnaround: prev.turnaround.filter((_, i) => i !== index) }));
+
   const resetForm = () => {
     setCustomerId('');
     setCompanyName('');
@@ -153,6 +189,7 @@ export default function AddQuotation() {
     setCustomerAddress('');
     setItems(defaultItems());
     setNotes('');
+    setSections(buildDefaultSections(sectionDefaults || { currency }));
   };
 
   const handleSubmit = async (e) => {
@@ -211,6 +248,13 @@ export default function AddQuotation() {
         };
       });
 
+      const cleanTurnaround = sections.turnaround
+        .map((t) => ({ priority: (t.priority || '').trim(), timing: (t.timing || '').trim() }))
+        .filter((t) => t.priority || t.timing);
+      const cleanTerms = (Array.isArray(sections.terms) ? sections.terms : [])
+        .map((t) => String(t).trim())
+        .filter(Boolean);
+
       const payload = {
         quotation_no: quotationNo.trim(),
         quotation_date: quotationDate,
@@ -221,6 +265,13 @@ export default function AddQuotation() {
         items: resolvedItems,
         sub_amount: resolvedItems.reduce((sum, it) => sum + it.total, 0),
         notes: notes.trim(),
+        doc_title: (sections.doc_title || '').trim(),
+        item_cost: sections.item_cost || '',
+        turnaround: cleanTurnaround,
+        procedures: sections.procedures || '',
+        operating_hours: sections.operating_hours || '',
+        terms: cleanTerms,
+        closing_note: sections.closing_note || '',
       };
 
       if (isEdit) {
@@ -435,10 +486,146 @@ export default function AddQuotation() {
               <input readOnly className="num" value={subAmount.toFixed(2)} style={{ fontWeight: 700 }} />
             </div>
           </div>
+        </div>
 
-          <div style={{ marginTop: 24 }}>
+        {/* ===== EDITABLE DOCUMENT CONTENT ===== */}
+        <div className="card" style={{ marginTop: 20 }}>
+          <div className="card-head" style={{ marginBottom: 16 }}>
+            <div>
+              <div className="card-title">Quotation document content</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>
+                Shown on the quotation view &amp; PDF. Pre-filled with defaults — edit any section as needed.
+              </div>
+            </div>
+          </div>
+
+          <div className="form-field" style={{ marginBottom: 18 }}>
+            <label htmlFor="doc_title">Document Title</label>
+            <input
+              id="doc_title"
+              value={sections.doc_title}
+              onChange={(e) => updateSection('doc_title', e.target.value)}
+            />
+          </div>
+
+          <div className="form-field" style={{ marginBottom: 18 }}>
+            <label htmlFor="item_cost">Item Cost</label>
+            <textarea
+              id="item_cost"
+              rows={2}
+              value={sections.item_cost}
+              onChange={(e) => updateSection('item_cost', e.target.value)}
+              style={sectionTextareaStyle}
+            />
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>One line per paragraph.</div>
+          </div>
+
+          <div style={{ marginBottom: 18 }}>
+            <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6 }}>
+              Permit Turn-Around Time
+            </label>
+            <div className="line-items table-scroll">
+              <table className="line-items-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '45%', minWidth: 160 }}>Priority</th>
+                    <th style={{ minWidth: 160 }}>Permit Returning Timings</th>
+                    <th style={{ width: 48 }} aria-label="Actions" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {sections.turnaround.map((t, i) => (
+                    <tr key={i}>
+                      <td>
+                        <input
+                          value={t.priority}
+                          onChange={(e) => updateTurn(i, 'priority', e.target.value)}
+                          placeholder="Priority"
+                        />
+                      </td>
+                      <td>
+                        <input
+                          value={t.timing}
+                          onChange={(e) => updateTurn(i, 'timing', e.target.value)}
+                          placeholder="Returning timing"
+                        />
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn-icon icon-delete"
+                          title="Remove row"
+                          onClick={() => removeTurn(i)}
+                          disabled={sections.turnaround.length === 1}
+                        >
+                          <TrashIcon width={15} height={15} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button type="button" className="add-row-btn" onClick={addTurn}>
+              <PlusIcon width={15} height={15} /> Add row
+            </button>
+          </div>
+
+          <div className="form-field" style={{ marginBottom: 18 }}>
+            <label htmlFor="procedures">Procedures</label>
+            <textarea
+              id="procedures"
+              rows={4}
+              value={sections.procedures}
+              onChange={(e) => updateSection('procedures', e.target.value)}
+              style={sectionTextareaStyle}
+            />
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>One line per paragraph.</div>
+          </div>
+
+          <div className="form-field" style={{ marginBottom: 18 }}>
+            <label htmlFor="operating_hours">Operating Hours</label>
+            <textarea
+              id="operating_hours"
+              rows={4}
+              value={sections.operating_hours}
+              onChange={(e) => updateSection('operating_hours', e.target.value)}
+              style={sectionTextareaStyle}
+            />
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>One line per paragraph.</div>
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="terms">Terms &amp; Conditions</label>
+            <textarea
+              id="terms"
+              rows={7}
+              value={(sections.terms || []).join('\n')}
+              onChange={(e) => updateSection('terms', e.target.value.split('\n'))}
+              style={sectionTextareaStyle}
+            />
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+              One condition per line — each line becomes a bullet point.
+            </div>
+          </div>
+
+          <div className="form-field" style={{ marginTop: 18 }}>
+            <label htmlFor="closing_note">Closing Note</label>
+            <textarea
+              id="closing_note"
+              rows={2}
+              value={sections.closing_note}
+              onChange={(e) => updateSection('closing_note', e.target.value)}
+              style={sectionTextareaStyle}
+            />
+          </div>
+        </div>
+
+        {/* ===== NOTES + ACTIONS ===== */}
+        <div className="card" style={{ marginTop: 20 }}>
+          <div>
             <label htmlFor="notes" style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6 }}>
-              Notes / Terms &amp; Conditions
+              Additional Notes
             </label>
             <textarea
               id="notes"
@@ -446,15 +633,7 @@ export default function AddQuotation() {
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Enter optional payment terms or quotation notes here..."
-              style={{
-                width: '100%',
-                borderRadius: 'var(--r-sm)',
-                border: '1px solid var(--line)',
-                padding: '10px 12px',
-                fontSize: 13,
-                fontFamily: 'inherit',
-                outline: 'none',
-              }}
+              style={sectionTextareaStyle}
             />
           </div>
 

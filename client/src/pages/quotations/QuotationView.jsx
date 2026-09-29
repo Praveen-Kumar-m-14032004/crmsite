@@ -6,6 +6,7 @@ import { errorMessage, useToast } from '../../hooks/ToastContext';
 import { DownloadIcon, EditIcon, PrinterIcon, SpinnerIcon } from '../../components/common/Icons';
 import logoImg from '../../assets/logo.png';
 import { formatDateDMY } from '../../utils/date';
+import { resolveSections, toLines } from '../../utils/quotationSections';
 
 export default function QuotationView() {
   const { id } = useParams();
@@ -69,6 +70,12 @@ export default function QuotationView() {
   const currency = company.default_currency || 'SGD';
   const items = Array.isArray(quotation.items) ? quotation.items : [];
   const companyName = company.company_name || 'Permit Declaration';
+  const sections = resolveSections(quotation, {
+    currency,
+    companyName,
+    email: company.email || 'Ops@permitdeclaration.sg',
+    contact: company.mobile || company.tel || company.contact_no || '',
+  });
   const TS = { fontFamily: "'Times New Roman', Georgia, serif" };
   const NAVY = '#1b2a4a';
 
@@ -135,7 +142,7 @@ export default function QuotationView() {
 
         {/* TITLE */}
         <h2 style={{ textAlign: 'center', fontSize: 16, fontWeight: 700, margin: '28px 0 18px', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-          OFFICIAL QUOTATION FOR PERMIT DECLARATIONS
+          {sections.doc_title}
         </h2>
 
         {/* PERMIT TYPES TABLE */}
@@ -161,8 +168,9 @@ export default function QuotationView() {
         {/* ITEM COST */}
         <div style={{ marginBottom: 28 }}>
           <div style={{ fontWeight: 700, marginBottom: 8 }}>Item Cost :</div>
-          <div style={{ marginBottom: 6 }}>1st to 10th items <strong>No Charges</strong></div>
-          <div>From 11th items onwards additional charge <strong>{currency} 0.50 Cents per line item</strong></div>
+          {toLines(sections.item_cost).map((line, i) => (
+            <div key={i} style={{ marginBottom: 6 }}>{line}</div>
+          ))}
         </div>
 
         {/* PERMIT TURN-AROUND TIME */}
@@ -175,15 +183,10 @@ export default function QuotationView() {
             </tr>
           </thead>
           <tbody>
-            {[
-              ['Normal Requests', 'Within 2hrs from time of Request'],
-              ['Urgent Requests', 'Within 60mins of Request'],
-              ['Super Urgent Requests', 'Within 30 mins of Request'],
-              ['Tier1/Control countries/Other Controlling Agencies', 'Depending upon the Customs queue'],
-            ].map(([p, t], i) => (
+            {sections.turnaround.map((row, i) => (
               <tr key={i}>
-                <td style={{ border: '1px solid #333', padding: '9px 14px' }}>{p}</td>
-                <td style={{ border: '1px solid #333', padding: '9px 14px', textAlign: 'center' }}>{t}</td>
+                <td style={{ border: '1px solid #333', padding: '9px 14px' }}>{row.priority}</td>
+                <td style={{ border: '1px solid #333', padding: '9px 14px', textAlign: 'center' }}>{row.timing}</td>
               </tr>
             ))}
           </tbody>
@@ -192,42 +195,28 @@ export default function QuotationView() {
         {/* PROCEDURES */}
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontWeight: 700, marginBottom: 8 }}>Procedures :</div>
-          <p style={{ margin: '0 0 6px' }}>To facilitate the customs permit application, kindly provide the following documents:</p>
-          <p style={{ margin: '0 0 6px', paddingLeft: 16 }}>.&nbsp; BL COPY / AWB COPY / Commercial Invoice / Packing List / NOA / BKG Form</p>
-          <p style={{ margin: '0 0 6px' }}>
-            Send Your Permit Request To Our Ops Team : <strong>Email: {company.email || 'Ops@permitdeclaration.sg'}</strong>
-          </p>
-          <p style={{ margin: '0 0 0' }}>
-            Upon receipt of the required documents, our ops team will process your permit application promptly. Approved
-            permit(s) will be forwarded to your email upon successful approval by Singapore Customs.
-          </p>
+          {toLines(sections.procedures).map((line, i) => (
+            <p key={i} style={{ margin: '0 0 6px' }}>{line}</p>
+          ))}
         </div>
 
         {/* OPERATING HOURS */}
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontWeight: 700, marginBottom: 8 }}>Operating Hours :</div>
-          <p style={{ margin: '0 0 6px' }}>24 Hours | 7 Days a Week | Including Public Holidays at <strong>NO EXTRA COST</strong></p>
-          <p style={{ margin: '0 0 6px' }}>We provide 24/7 Customs Permit Declaration Services to support your import and export operations at any time.</p>
-          <p style={{ margin: '0 0 6px' }}><strong>24/7 Assistance WhatsApp / Contact: {company.mobile || company.tel || '+65 XXXX XXXX'}</strong></p>
-          <p style={{ margin: 0 }}><strong>Express Permit Processing : Additional {currency} 10.00 per permit.</strong></p>
+          {toLines(sections.operating_hours).map((line, i) => (
+            <p key={i} style={{ margin: '0 0 6px' }}>{line}</p>
+          ))}
         </div>
 
         {/* TERMS & CONDITIONS */}
         <div style={{ marginBottom: 30 }}>
           <div style={{ fontWeight: 700, marginBottom: 8 }}>Terms &amp; Conditions :</div>
-          {[
-            'Payment for Declaration services shall be made within 7 days from the invoice date.',
-            "Under our GIRO arrangement with Singapore Customs, all applicable GST, Customs Duties, and Government charges are deducted directly from our company's GIRO account.",
-            "Customers are required to transfer the applicable GST and DUTY charges to our company's designated UOB bank account before permit submission and approval.",
-            'Permit application will be processed for approval only after the GST payment has been received.',
-            'Additional charges may apply for permit amendments, cancellations, controlled goods, licence applications, or other special customs requirements.',
-            'Unless otherwise stated, this quotation is valid for 10 days from the date of issue.',
-          ].map((t, i) => (
+          {sections.terms.map((t, i) => (
             <p key={i} style={{ margin: '0 0 5px', paddingLeft: 16 }}>.&nbsp; {t}</p>
           ))}
-          <p style={{ margin: '10px 0 0' }}>
-            Thank you for choosing {companyName} Permit Declaration Services. We look forward to serving you with fast, reliable, and professional support 24/7.
-          </p>
+          {sections.closing_note && (
+            <p style={{ margin: '10px 0 0' }}>{sections.closing_note}</p>
+          )}
         </div>
 
         {/* NOTES */}

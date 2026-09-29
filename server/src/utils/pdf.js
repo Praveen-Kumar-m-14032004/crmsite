@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const PdfPrinter = require('pdfmake');
+const { resolveSections, toLines } = require('./quotationSections');
 
 const FONT_DIR = path.join(__dirname, '..', 'assets', 'fonts');
 const LOGO_PATH = path.join(__dirname, '..', 'assets', 'logo.png');
@@ -664,8 +665,25 @@ function quotationPdfDefinition(quotation = {}, settings = {}) {
   ]);
 
   const companyName = settings.company_name || 'Permit Declaration';
-  const contactPhone = settings.mobile || settings.tel || settings.contact_no || '';
-  const emailAddr = settings.email || 'Ops@permitdeclaration.sg';
+  const sections = resolveSections(quotation, {
+    currency,
+    companyName,
+    email: settings.email || 'Ops@permitdeclaration.sg',
+    contact: settings.mobile || settings.tel || settings.contact_no || '',
+  });
+
+  /* Text paragraphs -> pdfmake blocks */
+  const paras = (text, extra = {}) =>
+    toLines(text).map((line) => ({ text: line, fontSize: 9, margin: [0, 0, 0, 3], ...extra }));
+
+  /* Turn-around table rows */
+  const turnaroundRows = (sections.turnaround.length
+    ? sections.turnaround
+    : [{ priority: '—', timing: '—' }]
+  ).map((row) => [
+    { text: row.priority || '', fontSize: 9 },
+    { text: row.timing || '', fontSize: 9, alignment: 'center' },
+  ]);
 
   return {
     pageSize: 'A4',
@@ -729,7 +747,7 @@ function quotationPdfDefinition(quotation = {}, settings = {}) {
       },
 
       /* OFFICIAL QUOTATION TITLE */
-      { text: 'OFFICIAL QUOTATION FOR PERMIT DECLARATIONS', bold: true, fontSize: 12, alignment: 'center', margin: [0, 0, 0, 10] },
+      { text: sections.doc_title || '', bold: true, fontSize: 12, alignment: 'center', margin: [0, 0, 0, 10] },
 
       /* PERMIT TYPES TABLE */
       {
@@ -757,8 +775,11 @@ function quotationPdfDefinition(quotation = {}, settings = {}) {
 
       /* ITEM COST */
       { text: 'Item Cost :', bold: true, fontSize: 9.5, margin: [0, 0, 0, 4] },
-      { text: [{ text: '1st to 10th items ' }, { text: 'No Charges', bold: true }], fontSize: 9, margin: [0, 0, 0, 4] },
-      { text: [{ text: 'From 11th items onwards additional charge ' }, { text: `${currency} 0.50 Cents per line item`, bold: true }], fontSize: 9, margin: [0, 0, 0, 14] },
+      ...(() => {
+        const lines = paras(sections.item_cost);
+        if (lines.length) lines[lines.length - 1].margin = [0, 0, 0, 14];
+        return lines;
+      })(),
 
       /* PERMIT TURN-AROUND TIME */
       { text: '(PERMIT TURN-AROUND TIME)', bold: true, fontSize: 10.5, alignment: 'center', margin: [0, 6, 0, 8] },
@@ -771,10 +792,7 @@ function quotationPdfDefinition(quotation = {}, settings = {}) {
               { text: 'Priority :', bold: true, alignment: 'center', fontSize: 9.5, margin: [0, 2, 0, 2] },
               { text: 'Permit Returning Timings :', bold: true, alignment: 'center', fontSize: 9.5, margin: [0, 2, 0, 2] },
             ],
-            [{ text: 'Normal Requests', fontSize: 9 }, { text: 'Within 2hrs from time of Request', fontSize: 9, alignment: 'center' }],
-            [{ text: 'Urgent Requests', fontSize: 9 }, { text: 'Within 60mins of Request', fontSize: 9, alignment: 'center' }],
-            [{ text: 'Super Urgent Requests', fontSize: 9 }, { text: 'Within 30 mins of Request', fontSize: 9, alignment: 'center' }],
-            [{ text: 'Tier1/Control countries/Other Controlling Agencies', fontSize: 9 }, { text: 'Depending upon the Customs queue', fontSize: 9, alignment: 'center' }],
+            ...turnaroundRows,
           ],
         },
         layout: {
@@ -787,33 +805,26 @@ function quotationPdfDefinition(quotation = {}, settings = {}) {
 
       /* PROCEDURES */
       { text: 'Procedures :', bold: true, fontSize: 9.5, margin: [0, 0, 0, 4] },
-      { text: 'To facilitate the customs permit application, kindly provide the following documents:', fontSize: 9, margin: [0, 0, 0, 3] },
-      { text: '  .  BL COPY / AWB COPY / Commercial Invoice / Packing List / NOA / BKG Form', fontSize: 9, margin: [0, 0, 0, 3] },
-      {
-        text: [
-          { text: 'Send Your Permit Request To Our Ops Team : ' },
-          { text: `Email: ${emailAddr}`, bold: true },
-        ],
-        fontSize: 9, margin: [0, 0, 0, 3],
-      },
-      { text: 'Upon receipt of the required documents, our ops team will process your permit application promptly. Approved permit(s) will be forwarded to your email upon successful approval by Singapore Customs.', fontSize: 9, margin: [0, 0, 0, 10] },
+      ...(() => {
+        const lines = paras(sections.procedures);
+        if (lines.length) lines[lines.length - 1].margin = [0, 0, 0, 10];
+        return lines;
+      })(),
 
       /* OPERATING HOURS */
       { text: 'Operating Hours :', bold: true, fontSize: 9.5, margin: [0, 0, 0, 4] },
-      { text: [{ text: '24 Hours | 7 Days a Week | Including Public Holidays at ' }, { text: 'NO EXTRA COST', bold: true }], fontSize: 9, margin: [0, 0, 0, 3] },
-      { text: 'We provide 24/7 Customs Permit Declaration Services to support your import and export operations at any time.', fontSize: 9, margin: [0, 0, 0, 3] },
-      { text: `24/7 Assistance WhatsApp / Contact: ${contactPhone}`, bold: true, fontSize: 9, margin: [0, 0, 0, 3] },
-      { text: `Express Permit Processing : Additional ${currency} 10.00 per permit.`, bold: true, fontSize: 9, margin: [0, 0, 0, 10] },
+      ...(() => {
+        const lines = paras(sections.operating_hours);
+        if (lines.length) lines[lines.length - 1].margin = [0, 0, 0, 10];
+        return lines;
+      })(),
 
       /* TERMS & CONDITIONS */
       { text: 'Terms & Conditions :', bold: true, fontSize: 9.5, margin: [0, 0, 0, 4] },
-      { text: '  .  Payment for Declaration services shall be made within 7 days from the invoice date.', fontSize: 9, margin: [0, 0, 0, 2] },
-      { text: "  .  Under our GIRO arrangement with Singapore Customs, all applicable GST, Customs Duties, and Government charges are deducted directly from our company's GIRO account.", fontSize: 9, margin: [0, 0, 0, 2] },
-      { text: "  .  Customers are required to transfer the applicable GST and DUTY charges to our company's designated UOB bank account before permit submission and approval.", fontSize: 9, margin: [0, 0, 0, 2] },
-      { text: '  .  Permit application will be processed for approval only after the GST payment has been received.', fontSize: 9, margin: [0, 0, 0, 2] },
-      { text: '  .  Additional charges may apply for permit amendments, cancellations, controlled goods, licence applications, or other special customs requirements.', fontSize: 9, margin: [0, 0, 0, 2] },
-      { text: '  .  Unless otherwise stated, this quotation is valid for 10 days from the date of issue.', fontSize: 9, margin: [0, 0, 0, 4] },
-      { text: `Thank you for choosing ${companyName} Permit Declaration Services. We look forward to serving you with fast, reliable, and professional support 24/7.`, fontSize: 9, margin: [0, 0, 0, 0] },
+      ...sections.terms.map((t) => ({ text: `  .  ${t}`, fontSize: 9, margin: [0, 0, 0, 2] })),
+      ...(sections.closing_note
+        ? [{ text: sections.closing_note, fontSize: 9, margin: [0, 4, 0, 0] }]
+        : []),
     ],
     styles: {
       wordmark: { fontSize: 13, bold: true, color: PURPLE, lineHeight: 1 },

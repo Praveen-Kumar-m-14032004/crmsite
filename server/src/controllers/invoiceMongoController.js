@@ -7,13 +7,41 @@ const { buildInvoiceEmail } = require('../utils/invoiceEmail');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** Split a "a@b.com, c@d.com; e@f.com" string (or array) into a clean list. */
+/**
+ * Split a recipient string (or array) into a clean, unique list. Accepts
+ * commas, semicolons, newlines or spaces as separators, and tolerates
+ * display-name paste formats like "Name <a@b.com>".
+ */
 function parseEmails(raw) {
   if (Array.isArray(raw)) raw = raw.join(',');
-  return String(raw || '')
-    .split(/[,;\s]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const out = [];
+  const seen = new Set();
+  const add = (email) => {
+    const e = String(email || '').trim();
+    if (!e) return;
+    const key = e.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(e);
+  };
+  // Split on comma / semicolon / newline only — keep spaces so "Name <email>" survives.
+  for (const part of String(raw || '').split(/[,;\n]+/)) {
+    const token = part.trim();
+    if (!token) continue;
+    const angled = token.match(/<([^>]+)>/); // "Name <email>" -> email
+    if (angled) { add(angled[1]); continue; }
+    const pieces = token.split(/\s+/).filter(Boolean);
+    if (pieces.length > 1) {
+      // Space-separated: keep the pieces that look like emails; otherwise keep
+      // the whole token so validation can report it.
+      const emails = pieces.filter((p) => p.includes('@'));
+      if (emails.length) emails.forEach(add);
+      else add(token);
+    } else {
+      add(token);
+    }
+  }
+  return out;
 }
 
 const TEN_DAYS_MS = 10 * 24 * 60 * 60 * 1000;
@@ -656,16 +684,19 @@ async function emailInvoice(req, res) {
   const ccList = parseEmails(req.body?.cc);
 
   if (toList.length === 0) {
+    console.warn(`[email] invoice ${id}: no recipient (customer_email=${JSON.stringify(invoice.customer_email)})`);
     return res.status(400).json({
       message: `No email address on file for ${invoice.companyname || 'this customer'}. Enter a recipient email.`,
     });
   }
   const invalidTo = toList.filter((e) => !EMAIL_RE.test(e));
   if (invalidTo.length) {
+    console.warn(`[email] invoice ${id}: invalid recipient(s): ${invalidTo.join(', ')}`);
     return res.status(400).json({ message: `Invalid recipient email: ${invalidTo.join(', ')}` });
   }
   const invalidCc = ccList.filter((e) => !EMAIL_RE.test(e));
   if (invalidCc.length) {
+    console.warn(`[email] invoice ${id}: invalid CC: ${invalidCc.join(', ')}`);
     return res.status(400).json({ message: `Invalid CC email: ${invalidCc.join(', ')}` });
   }
 

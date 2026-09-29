@@ -49,7 +49,7 @@ function buildInvoiceEmail(invoice = {}, settings = {}) {
   const webHref = /^https?:\/\//i.test(website) ? website : `https://${website}`;
   const LINK = 'color:#1155cc; text-decoration:underline;';
 
-  const subject = `Invoice ${invoice.invoice_no || ''} - ${period}`.trim();
+  const subject = `PERMIT DECLARATION INVOICE FOR THE MONTH ${period.toUpperCase()}`.trim();
 
   const textLines = [
     `Dear ${greetingName},`,

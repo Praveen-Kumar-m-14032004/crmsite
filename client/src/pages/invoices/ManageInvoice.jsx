@@ -7,10 +7,12 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { errorMessage, useToast } from '../../hooks/ToastContext';
 import DataTable from '../../components/common/DataTable';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
+import EmailInvoiceDialog from '../../components/common/EmailInvoiceDialog';
 import { formatDateDMY } from '../../utils/date';
 import {
   AlertIcon,
   EditIcon,
+  MailIcon,
   PlusIcon,
   PrinterIcon,
   RestoreIcon,
@@ -45,6 +47,7 @@ export default function ManageInvoice() {
   const [deleting, setDeleting] = useState(false);
   const [restoringId, setRestoringId] = useState(null);
   const [printingId, setPrintingId] = useState(null);
+  const [emailRow, setEmailRow] = useState(null);
   const [currency, setCurrency] = useState(() => getCachedCurrency() || 'SGD');
   const [counts, setCounts] = useState({ activeCount: 0, trashCount: 0 });
 
@@ -172,6 +175,12 @@ export default function ManageInvoice() {
               {printingId === row.id ? <SpinnerIcon width={15} height={15} /> : <PrinterIcon width={15} height={15} />}
             </button>
           )}
+          {can('invoices.print') && (
+            <button className="btn-icon icon-email" title="Email invoice to customer"
+              onClick={() => setEmailRow(row)}>
+              <MailIcon width={15} height={15} />
+            </button>
+          )}
           {can('invoices.edit') && (
             <button className="btn-icon icon-edit-orange" title="Edit invoice" onClick={() => navigate(`/invoices/${row.id}/edit`)}>
               <EditIcon width={15} height={15} />
@@ -185,7 +194,7 @@ export default function ManageInvoice() {
         </div>
       ),
     },
-  ], [printingId, currency, can, navigate, handlePrint]);
+  ], [printingId, currency, can, navigate, handlePrint, setEmailRow]);
 
   // Memoized trash columns — only recalculates when restoringId or currency changes
   const trashColumns = useMemo(() => [
@@ -300,6 +309,11 @@ export default function ManageInvoice() {
         confirmText={activeTab === 'trash' ? 'Delete Permanently' : 'Move to Trash'}
         onConfirm={handleDelete}
         onCancel={() => setToDelete(null)}
+      />
+
+      <EmailInvoiceDialog
+        invoice={emailRow}
+        onClose={() => setEmailRow(null)}
       />
     </div>
   );

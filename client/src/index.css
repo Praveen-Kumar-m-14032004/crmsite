@@ -245,6 +245,11 @@ h4 {
   background: var(--purple-100);
 }
 
+.icon-email {
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+
 .icon-view {
   color: var(--purple-700);
   background: var(--purple-50);

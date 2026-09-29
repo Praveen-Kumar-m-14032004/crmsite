@@ -34,6 +34,7 @@ export const invoicesApi = {
   remove: (id) => api.delete(`/invoices/${id}`),
   restore: (id) => api.post(`/invoices/${id}/restore`),
   permanentDelete: (id) => api.delete(`/invoices/${id}/permanent`),
+  emailInvoice: (id, data) => api.post(`/invoices/${id}/email`, data),
 };
 
 export const quotationsApi = {

@@ -87,6 +87,9 @@ export function AlertIcon(p) {
 export function DownloadIcon(p) {
   return (<svg {...s(p)}><path d="M12 3v12" /><polyline points="7 10 12 15 17 10" /><path d="M4 21h16" /></svg>);
 }
+export function MailIcon(p) {
+  return (<svg {...s(p)}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg>);
+}
 export function FilterIcon(p) {
   return (<svg {...s(p)}><path d="M3 5h18l-7 8v6l-4 2v-8Z" /></svg>);
 }

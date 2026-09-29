@@ -17,5 +17,6 @@ router.post('/:id/restore', requirePermission('invoices.delete'), asyncHandler(c
 router.delete('/:id/permanent', requirePermission('invoices.delete'), asyncHandler(ctrl.permanentDelete));
 router.delete('/:id', requirePermission('invoices.delete'), asyncHandler(ctrl.remove));
 router.get('/:id/print', requirePermission('invoices.print'), asyncHandler(ctrl.print));
+router.post('/:id/email', requirePermission('invoices.print'), asyncHandler(ctrl.emailInvoice));
 
 module.exports = router;

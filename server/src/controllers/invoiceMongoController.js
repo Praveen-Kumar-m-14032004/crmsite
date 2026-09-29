@@ -2,6 +2,10 @@ const crypto = require('crypto');
 const { collection, nextId, nextIds, now, numericId, isDuplicateError } = require('../utils/mongo');
 const { buildPdf, createPdfStream, invoicePdfDefinition } = require('../utils/pdf');
 const { cached, invalidate } = require('../utils/cache');
+const { sendMail, isMailConfigured } = require('../utils/mailer');
+const { buildInvoiceEmail } = require('../utils/invoiceEmail');
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const TEN_DAYS_MS = 10 * 24 * 60 * 60 * 1000;
 const TOTAL_TTL_MS = 30_000;
@@ -257,6 +261,7 @@ async function getInvoiceWithItems(id) {
     person_incharge: customer?.person_incharge || '',
     customer_address: customer?.address || '',
     customer_mobile: customer?.mobile_no || '',
+    customer_email: customer?.email || '',
     items: enrichedItems,
     status: normStatus,
   };
@@ -560,6 +565,20 @@ async function permanentDelete(req, res) {
  *   3. Fresh cache headers (never serves stale PDFs after edit)
  * ============================================================ */
 
+/**
+ * Build (or fetch from the LRU cache) the invoice PDF buffer.
+ * Shared by print() and emailInvoice().
+ */
+async function buildInvoicePdfBuffer(invoice, settings) {
+  const cacheKey = getInvoicePdfCacheKey(invoice);
+  const cachedBuffer = lruGet(cacheKey);
+  if (cachedBuffer) return cachedBuffer;
+  const docDef = invoicePdfDefinition(invoice, invoice.items || [], settings);
+  const buffer = await buildPdf(docDef);
+  lruSet(cacheKey, buffer);
+  return buffer;
+}
+
 async function print(req, res) {
   const id = numericId(req.params.id);
   if (!id) return res.status(400).json({ message: 'Invalid invoice ID' });
@@ -602,6 +621,61 @@ async function print(req, res) {
   return res.send(buffer);
 }
 
+/* ============================================================
+ * Email — send the invoice PDF to the customer's email address
+ * ============================================================ */
+
+async function emailInvoice(req, res) {
+  const id = numericId(req.params.id);
+  if (!id) return res.status(400).json({ message: 'Invalid invoice ID' });
+
+  if (!isMailConfigured()) {
+    return res.status(400).json({
+      message: 'Email sending is not configured on the server. Add SMTP_USER and SMTP_PASS to the server .env.',
+    });
+  }
+
+  const [invoice, settings] = await Promise.all([
+    getInvoiceWithItems(id),
+    getCompanySettings(),
+  ]);
+  if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
+
+  const recipient = String(req.body?.email || invoice.customer_email || '').trim();
+  if (!recipient) {
+    return res.status(400).json({
+      message: `No email address on file for ${invoice.companyname || 'this customer'}. Enter a recipient email.`,
+    });
+  }
+  if (!EMAIL_RE.test(recipient)) {
+    return res.status(400).json({ message: 'Please enter a valid recipient email address.' });
+  }
+
+  const buffer = await buildInvoicePdfBuffer(invoice, settings);
+  const { subject, text, html } = buildInvoiceEmail(invoice, settings);
+
+  try {
+    await sendMail({
+      to: recipient,
+      subject,
+      text,
+      html,
+      attachments: [
+        {
+          filename: `Invoice-${invoice.invoice_no || invoice.id}.pdf`,
+          content: buffer,
+          contentType: 'application/pdf',
+        },
+      ],
+    });
+  } catch (err) {
+    const status = err.statusCode || 502;
+    return res.status(status).json({ message: err.message || 'Failed to send the email. Please try again.' });
+  }
+
+  res.json({ message: `Invoice #${invoice.invoice_no} emailed to ${recipient}`, to: recipient });
+}
+
 module.exports = {
   nextNumber,
   list,
@@ -613,5 +687,6 @@ module.exports = {
   restore,
   permanentDelete,
   print,
+  emailInvoice,
   cleanupExpiredTrash,
 };

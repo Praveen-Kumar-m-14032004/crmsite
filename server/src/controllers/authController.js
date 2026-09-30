@@ -2,15 +2,13 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { collection } = require('../utils/mongo');
 const { seedDefaults } = require('../utils/seedHelper');
+const { getPermissionsForRole, invalidateUserAccess, ADMIN_ROLE_ID } = require('../utils/authz');
 
 const DEFAULT_JWT_SECRET = 'permit-declaration-secret-da41d4f289e9d0410ad09455e84f577c';
 
-async function getPermissionsForRole(roleId) {
-  const links = await collection('role_permissions').find({ role_id: roleId }).toArray();
-  const permissions = await collection('permissions').find({
-    id: { $in: links.map((link) => link.permission_id) },
-  }).toArray();
-  return permissions.map((permission) => permission.code);
+function signToken(payload) {
+  const secret = process.env.JWT_SECRET || DEFAULT_JWT_SECRET;
+  return jwt.sign(payload, secret, { expiresIn: process.env.JWT_EXPIRES_IN || '8h' });
 }
 
 async function login(req, res) {
@@ -47,7 +45,7 @@ async function login(req, res) {
           $set: {
             password: hashedPassword,
             username: 'admin',
-            role_id: 1,
+            role_id: ADMIN_ROLE_ID,
             is_active: 1,
             name: 'System Admin',
             email: 'admin@example.com',
@@ -58,16 +56,12 @@ async function login(req, res) {
       );
       user = await collection('users').findOne({ username: 'admin' });
     }
+    invalidateUserAccess(user?.id);
 
-    const role = user ? await collection('roles').findOne({ id: user.role_id }) : null;
-    let permissions = role ? await getPermissionsForRole(user.role_id) : [];
+    let permissions = user ? await getPermissionsForRole(user.role_id) : [];
     if (!permissions.length) {
-      permissions = [
-        'customers.view', 'customers.create', 'customers.edit', 'customers.delete',
-        'products.view', 'products.create', 'products.edit', 'products.delete',
-        'invoices.view', 'invoices.create', 'invoices.edit', 'invoices.delete', 'invoices.print',
-        'reports.view', 'reports.export', 'users.manage', 'roles.manage', 'settings.manage', 'dashboard.view',
-      ];
+      // Defensive: the Admin role is re-granted every permission by the seeder.
+      permissions = await collection('permissions').distinct('code');
     }
 
     const payload = {
@@ -75,20 +69,15 @@ async function login(req, res) {
       name: user?.name || 'System Admin',
       username: user?.username || 'admin',
       email: user?.email || 'admin@example.com',
-      roleId: 1,
+      roleId: ADMIN_ROLE_ID,
       roleName: 'Admin',
       permissions,
     };
 
-    const secret = process.env.JWT_SECRET || DEFAULT_JWT_SECRET;
-    const token = jwt.sign(payload, secret, {
-      expiresIn: process.env.JWT_EXPIRES_IN || '8h',
-    });
-
-    return res.json({ token, user: payload });
+    return res.json({ token: signToken(payload), user: payload });
   }
 
-  let user = await collection('users').findOne({
+  const user = await collection('users').findOne({
     username: { $regex: new RegExp(`^${trimmedUsername}$`, 'i') },
   });
 
@@ -114,12 +103,14 @@ async function login(req, res) {
     permissions,
   };
 
-  const secret = process.env.JWT_SECRET || DEFAULT_JWT_SECRET;
-  const token = jwt.sign(payload, secret, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '8h',
-  });
+  res.json({ token: signToken(payload), user: payload });
+}
 
-  res.json({ token, user: payload });
+// Current account with permissions as they are right now (the auth middleware
+// already resolved them live), so the client can refresh what it cached at login.
+async function me(req, res) {
+  const { id, name, username, email, roleId, roleName, permissions } = req.user;
+  res.json({ user: { id, name, username, email, roleId, roleName, permissions } });
 }
 
 async function logout(_req, res) {
@@ -127,4 +118,4 @@ async function logout(_req, res) {
   res.json({ message: 'Logged out' });
 }
 
-module.exports = { login, logout, getPermissionsForRole };
+module.exports = { login, logout, me, getPermissionsForRole };

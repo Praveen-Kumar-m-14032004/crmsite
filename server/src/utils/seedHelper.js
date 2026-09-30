@@ -1,20 +1,27 @@
 const bcrypt = require('bcryptjs');
 const { getDb } = require('../config/db');
-const { now } = require('./mongo');
+const { now, syncCounter } = require('./mongo');
 
+const ADMIN_ROLE_ID = 1;
+
+// [code, module, action]
 const permissionRows = [
   ['customers.view', 'customers', 'view'], ['customers.create', 'customers', 'create'], ['customers.edit', 'customers', 'edit'], ['customers.delete', 'customers', 'delete'],
   ['products.view', 'products', 'view'], ['products.create', 'products', 'create'], ['products.edit', 'products', 'edit'], ['products.delete', 'products', 'delete'],
   ['invoices.view', 'invoices', 'view'], ['invoices.create', 'invoices', 'create'], ['invoices.edit', 'invoices', 'edit'], ['invoices.delete', 'invoices', 'delete'], ['invoices.print', 'invoices', 'print'],
+  // GST-only scope: same actions, but confined to invoices that carry the GST line item.
+  ['gst_invoices.view', 'gst_invoices', 'view'], ['gst_invoices.create', 'gst_invoices', 'create'], ['gst_invoices.edit', 'gst_invoices', 'edit'], ['gst_invoices.delete', 'gst_invoices', 'delete'], ['gst_invoices.print', 'gst_invoices', 'print'],
   ['reports.view', 'reports', 'view'], ['reports.export', 'reports', 'export'], ['users.manage', 'users', 'manage'], ['roles.manage', 'roles', 'manage'], ['settings.manage', 'settings', 'manage'], ['dashboard.view', 'dashboard', 'view'],
   ['quotations.view', 'quotations', 'view'], ['quotations.create', 'quotations', 'create'], ['quotations.edit', 'quotations', 'edit'], ['quotations.delete', 'quotations', 'delete'], ['quotations.print', 'quotations', 'print'],
 ];
 
+// [id, name, description, is_system]
 const roleRows = [
   [1, 'Admin', 'Full control of the system, users, roles and company settings', 1],
   [2, 'Accountant', 'Runs day-to-day invoicing and payments', 1],
   [3, 'Sales', 'Onboards customers, read-only on invoices', 1],
   [4, 'Viewer', 'Read-only oversight across all modules', 1],
+  [5, 'Supervisor', 'GST invoices only: create, edit, delete and print GST bills, plus the dashboard', 1],
 ];
 
 const roleCodes = {
@@ -22,6 +29,7 @@ const roleCodes = {
   2: ['customers.view', 'customers.create', 'customers.edit', 'products.view', 'invoices.view', 'invoices.create', 'invoices.edit', 'invoices.delete', 'invoices.print', 'quotations.view', 'quotations.create', 'quotations.edit', 'quotations.delete', 'quotations.print', 'reports.view', 'reports.export', 'dashboard.view'],
   3: ['customers.view', 'customers.create', 'customers.edit', 'products.view', 'invoices.view', 'quotations.view', 'quotations.create', 'dashboard.view'],
   4: ['customers.view', 'products.view', 'invoices.view', 'quotations.view', 'reports.view', 'reports.export', 'dashboard.view'],
+  5: ['gst_invoices.view', 'gst_invoices.create', 'gst_invoices.edit', 'gst_invoices.delete', 'gst_invoices.print', 'dashboard.view'],
 };
 
 const products = [
@@ -29,6 +37,22 @@ const products = [
   'CARGO CLEARANCE AND TRANSPORTATION', 'ITEM COST',
   'IMPORTER OF THE RECORD (USING CHOLA AS IMPORTER)', 'LICENSE (USING CHOLA LICENSE)',
 ];
+
+// Collections whose ids come from nextId(); their counters must never lag behind
+// rows that were seeded or migrated with explicit ids.
+const COUNTER_COLLECTIONS = ['roles', 'users', 'products', 'customers', 'invoices', 'invoice_items', 'quotations'];
+
+async function grantAll(db, roleId, codes, permissionIds) {
+  for (const code of codes) {
+    const pId = permissionIds.get(code);
+    if (!pId) continue;
+    await db.collection('role_permissions').updateOne(
+      { _id: `${roleId}:${pId}` },
+      { $set: { role_id: Number(roleId), permission_id: pId } },
+      { upsert: true }
+    );
+  }
+}
 
 async function seedDefaults(overrideUsername, overridePassword) {
   const db = getDb();
@@ -45,27 +69,31 @@ async function seedDefaults(overrideUsername, overridePassword) {
     }
   }
 
+  const insertedRoleIds = new Set();
   for (const [id, name, description, is_system] of roleRows) {
-    await db.collection('roles').updateOne(
+    const result = await db.collection('roles').updateOne(
       { id },
       { $setOnInsert: { id, name, description, is_system, created_at: now() } },
       { upsert: true }
     );
+    if (result.upsertedCount) insertedRoleIds.add(id);
   }
 
   const permissionDocs = await permissions.find().toArray();
   const permissionIds = new Map(permissionDocs.map((p) => [p.code, p.id]));
-  for (const [role_id, codes] of Object.entries(roleCodes)) {
-    for (const code of codes) {
-      const pId = permissionIds.get(code);
-      if (pId) {
-        await db.collection('role_permissions').updateOne(
-          { _id: `${role_id}:${pId}` },
-          { $set: { role_id: Number(role_id), permission_id: pId } },
-          { upsert: true }
-        );
-      }
+
+  for (const [roleIdText, codes] of Object.entries(roleCodes)) {
+    const roleId = Number(roleIdText);
+    if (roleId === ADMIN_ROLE_ID) {
+      // Admin always holds every permission, including ones added in later releases.
+      await grantAll(db, roleId, codes, permissionIds);
+      continue;
     }
+    // Other built-in roles get their defaults once. After that the matrix an admin
+    // saves is the source of truth and must survive restarts.
+    const alreadyConfigured = !insertedRoleIds.has(roleId)
+      && (await db.collection('role_permissions').countDocuments({ role_id: roleId })) > 0;
+    if (!alreadyConfigured) await grantAll(db, roleId, codes, permissionIds);
   }
 
   for (let index = 0; index < products.length; index += 1) {
@@ -111,7 +139,7 @@ async function seedDefaults(overrideUsername, overridePassword) {
         $set: {
           password: hashedPassword,
           username: adminUsername,
-          role_id: 1,
+          role_id: ADMIN_ROLE_ID,
           is_active: 1,
         },
       }
@@ -123,7 +151,7 @@ async function seedDefaults(overrideUsername, overridePassword) {
         $set: {
           password: hashedPassword,
           username: adminUsername,
-          role_id: 1,
+          role_id: ADMIN_ROLE_ID,
           is_active: 1,
           name: 'System Admin',
           email: 'admin@example.com',
@@ -137,11 +165,11 @@ async function seedDefaults(overrideUsername, overridePassword) {
     );
   }
 
-  await db.collection('counters').updateOne(
-    { _id: 'users' },
-    { $max: { value: 1 } },
-    { upsert: true }
-  );
+  // Seeded rows above bypass the id counters; bring every counter up to date so
+  // "create" never collides with an existing id.
+  for (const name of COUNTER_COLLECTIONS) {
+    await syncCounter(name);
+  }
 }
 
-module.exports = { seedDefaults };
+module.exports = { seedDefaults, permissionRows, roleRows, roleCodes };

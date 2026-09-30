@@ -39,6 +39,28 @@ async function nextIds(name, count = 1, session) {
   return Array.from({ length: count }, (_, i) => startId + i);
 }
 
+/**
+ * Move a counter forward to the highest `id` already stored in the collection.
+ * Seeded rows (roles 1-4, products 1-8) and migrated data are written with fixed
+ * ids that bypass the counter, so without this nextId() would hand out an id that
+ * is already taken and every create would fail with a duplicate-key error.
+ */
+async function syncCounter(name) {
+  const [top] = await getDb().collection(name)
+    .find({ id: { $type: 'number' } }, { projection: { id: 1 } })
+    .sort({ id: -1 })
+    .limit(1)
+    .toArray();
+  const maxId = Number(top?.id) || 0;
+  if (!maxId) return 0;
+  await getDb().collection('counters').updateOne(
+    { _id: name },
+    { $max: { value: maxId } },
+    { upsert: true },
+  );
+  return maxId;
+}
+
 function isDuplicateError(error) {
   return error?.code === 11000;
 }
@@ -47,4 +69,4 @@ function now() {
   return new Date().toISOString();
 }
 
-module.exports = { collection, numericId, nextId, nextIds, isDuplicateError, now };
+module.exports = { collection, numericId, nextId, nextIds, syncCounter, isDuplicateError, now };

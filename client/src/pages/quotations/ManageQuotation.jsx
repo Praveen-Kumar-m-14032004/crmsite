@@ -119,7 +119,7 @@ export default function ManageQuotation() {
       align: 'right',
       render: (r) => (
         <div className="row-actions" style={{ justifyContent: 'flex-end' }}>
-          {can('quotations.view', 'invoices.view') && (
+          {can('quotations.view') && (
             <Link
               to={`/estimates/${r.id}`}
               className="btn-icon icon-view"
@@ -129,7 +129,7 @@ export default function ManageQuotation() {
             </Link>
           )}
 
-          {can('quotations.print', 'invoices.print', 'quotations.view', 'invoices.view') && (
+          {can('quotations.print') && (
             <button
               type="button"
               className="btn-icon icon-print"
@@ -145,7 +145,7 @@ export default function ManageQuotation() {
             </button>
           )}
 
-          {can('quotations.edit', 'invoices.edit') && (
+          {can('quotations.edit') && (
             <Link
               to={`/estimates/${r.id}/edit`}
               className="btn-icon icon-edit-orange"
@@ -155,7 +155,7 @@ export default function ManageQuotation() {
             </Link>
           )}
 
-          {can('quotations.delete', 'invoices.delete') && (
+          {can('quotations.delete') && (
             <button
               type="button"
               className="btn-icon icon-delete"
@@ -177,7 +177,7 @@ export default function ManageQuotation() {
           <div className="eyebrow">Transactions</div>
           <h1>Manage Quotation</h1>
         </div>
-        {can('quotations.create', 'invoices.create') && (
+        {can('quotations.create') && (
           <Link to="/estimates/add" className="btn btn-primary">
             <PlusIcon /> Add Quotation
           </Link>

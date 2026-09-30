@@ -79,10 +79,19 @@ terminal for `[api] Permit Declaration API listening on http://localhost:5000`.
 | **Accountant** | Full invoices, view/create customers, view products, reports + export |
 | **Sales** | Full customers, view products, read-only invoices |
 | **Viewer** | Read-only everywhere, plus report export |
+| **Supervisor** | GST invoices only (view, create, edit, delete, print) plus the dashboard |
 
 Permissions are enforced in the API by `requirePermission()` on every route, and mirrored
 in the UI (hidden menu items and disabled actions). Admins can create custom roles and
 edit the permission matrix under **User Management → Roles & Permissions**.
+
+The matrix has two invoice rows. **Invoices (all)** covers every invoice; **GST invoices
+only** covers just the invoices that contain the `GST` product line. A role that holds only
+the GST permissions (like Supervisor) sees nothing but GST invoices, and every invoice it
+creates or edits must keep the GST line. Roles are re-read on every request, so a change
+saved in the matrix applies to signed-in users within about 30 seconds. Admin always holds
+every permission and cannot be restricted; built-in roles cannot be deleted; a custom role
+cannot be deleted while users are assigned to it.
 
 ---
 

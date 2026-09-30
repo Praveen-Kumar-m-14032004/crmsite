@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { customersApi, invoicesApi, productsApi, settingsApi } from '../../api/endpoints';
 import { invalidatePdfCache } from '../../api/download';
 import { errorMessage, useToast } from '../../hooks/ToastContext';
+import { useAuth } from '../../hooks/AuthContext';
 import { toDateInputValue } from '../../utils/date';
 import { PlusIcon, SpinnerIcon, TrashIcon } from '../../components/common/Icons';
 import SearchableSelect from '../../components/common/SearchableSelect';
@@ -10,12 +11,18 @@ import SearchableSelect from '../../components/common/SearchableSelect';
 const today = () => new Date().toISOString().slice(0, 10);
 const emptyItem = () => ({ product_id: '', description: '', rate: '', quantity: 1 });
 const defaultItems = () => Array.from({ length: 6 }, emptyItem);
+// An invoice counts as a GST bill when one of its lines is the "GST" product.
+const isGstProduct = (p) => String(p?.productname || '').trim().toUpperCase() === 'GST';
+const GST_REQUIRED = 'Your role can only save GST invoices. Add the "GST" product as a line item.';
 
 export default function AddInvoice() {
   const { id } = useParams();
   const isEdit = Boolean(id);
   const navigate = useNavigate();
   const toast = useToast();
+  // GST-only accounts (e.g. Supervisor) may only create or edit GST invoices;
+  // the API enforces it, the form pre-fills the GST line and warns before saving.
+  const { gstOnly } = useAuth();
 
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
@@ -68,6 +75,10 @@ export default function AddInvoice() {
           })) : defaultItems());
         } else {
           setInvoiceNo(last.data.invoice_no);
+          if (gstOnly) {
+            const gst = (pRes.data.data || []).find(isGstProduct);
+            if (gst) setItems((prev) => prev.map((it, i) => (i === 0 ? { ...it, product_id: String(gst.id) } : it)));
+          }
         }
       })
       .catch((err) => setError(errorMessage(err, 'Could not load invoice data')))
@@ -82,6 +93,20 @@ export default function AddInvoice() {
   );
   const paid = Number(paidAmount) || 0;
   const dueAmount = Math.max(subAmount - paid, 0);
+
+  const gstProduct = useMemo(() => (products || []).find(isGstProduct) || null, [products]);
+  const hasGstLine = useMemo(() => items.some((it) => {
+    const value = String(it.product_id || '').trim();
+    if (!value) return false;
+    const product = products.find((p) => String(p.id) === value);
+    return product ? isGstProduct(product) : value.toUpperCase() === 'GST';
+  }), [items, products]);
+
+  const freshItems = () => {
+    const rows = defaultItems();
+    if (gstOnly && gstProduct) rows[0] = { ...rows[0], product_id: String(gstProduct.id) };
+    return rows;
+  };
 
   const handleCustomerChange = (value) => {
     setCustomerId(value);
@@ -120,7 +145,7 @@ export default function AddInvoice() {
   const resetForm = () => {
     setCustomerId('');
     setCustomerContact('');
-    setItems(defaultItems());
+    setItems(freshItems());
     setPaidAmount('');
     setInvoiceDate(today());
     setError('');
@@ -140,6 +165,7 @@ export default function AddInvoice() {
     if (itemsToSave.some((it) => !it.product_id || !String(it.product_id).trim())) { setError('Every line item needs a product selected.'); return; }
     if (itemsToSave.some((it) => it.rate === '' || it.rate === null || isNaN(Number(it.rate)) || Number(it.rate) < 0)) { setError('Every line item needs a valid rate.'); return; }
     if (itemsToSave.some((it) => !Number(it.quantity) || Number(it.quantity) <= 0)) { setError('Quantity must be greater than zero.'); return; }
+    if (gstOnly && !hasGstLine) { setError(GST_REQUIRED); return; }
     if (paid > subAmount) { setError('Paid amount cannot be more than the sub amount.'); return; }
 
     setSaving(true);
@@ -220,7 +246,7 @@ export default function AddInvoice() {
   if (loading) {
     return (
       <div>
-        <div className="page-header"><h1>{isEdit ? 'Edit Invoice' : 'Add Invoice'}</h1></div>
+        <div className="page-header"><h1>{isEdit ? `Edit ${gstOnly ? 'GST ' : ''}Invoice` : `Add ${gstOnly ? 'GST ' : ''}Invoice`}</h1></div>
         <div className="card" style={{ display: 'grid', gap: 16 }}>
           {[1, 2, 3, 4].map((i) => <div key={i} className="skeleton" style={{ height: 44 }} />)}
         </div>
@@ -232,8 +258,8 @@ export default function AddInvoice() {
     <div>
       <div className="page-header">
         <div>
-          <div className="eyebrow">Invoice</div>
-          <h1>{isEdit ? `Edit Invoice #${invoiceNo}` : 'Add Invoice'}</h1>
+          <div className="eyebrow">{gstOnly ? 'GST Invoice' : 'Invoice'}</div>
+          <h1>{isEdit ? `Edit ${gstOnly ? 'GST ' : ''}Invoice #${invoiceNo}` : `Add ${gstOnly ? 'GST ' : ''}Invoice`}</h1>
         </div>
         <button className="btn btn-secondary" type="button" onClick={() => navigate('/invoices')}>Back to list</button>
       </div>
@@ -284,8 +310,12 @@ export default function AddInvoice() {
           <div className="card-head" style={{ marginBottom: 16 }}>
             <div>
               <div className="card-title">Items</div>
+              {gstOnly && <div className="card-sub">A "GST" line item is required for your role.</div>}
             </div>
-            <span className="badge badge-info badge-plain">{items.length} {items.length === 1 ? 'row' : 'rows'}</span>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {gstOnly && !hasGstLine && <span className="badge badge-warning">GST line missing</span>}
+              <span className="badge badge-info badge-plain">{items.length} {items.length === 1 ? 'row' : 'rows'}</span>
+            </div>
           </div>
 
           <div className="line-items table-scroll">

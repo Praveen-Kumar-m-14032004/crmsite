@@ -4,6 +4,7 @@ const { buildPdf, createPdfStream, invoicePdfDefinition } = require('../utils/pd
 const { cached, invalidate } = require('../utils/cache');
 const { sendMail, isMailConfigured } = require('../utils/mailer');
 const { buildInvoiceEmail } = require('../utils/invoiceEmail');
+const { gstOnly } = require('../utils/authz');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -74,6 +75,18 @@ function totalTrash() {
   );
 }
 
+function totalGstInvoices() {
+  return cached('invoice:totalActiveGst', TOTAL_TTL_MS, () =>
+    collection('invoices').countDocuments({ is_deleted: { $ne: true }, ...GST_FILTER })
+  );
+}
+
+function totalGstTrash() {
+  return cached('invoice:totalTrashGst', TRASH_COUNT_TTL_MS, () =>
+    collection('invoices').countDocuments({ is_deleted: true, ...GST_FILTER })
+  );
+}
+
 function getCompanySettings() {
   return cached('invoice:companySettings', SETTINGS_TTL_MS, async () =>
     (await collection('company_settings').findOne({})) || {}
@@ -81,8 +94,7 @@ function getCompanySettings() {
 }
 
 function invalidateCounts() {
-  invalidate('invoice:totalActive');
-  invalidate('invoice:totalTrash');
+  invalidate('invoice:total');
   invalidate('dashboard:');
 }
 
@@ -133,6 +145,32 @@ function invalidateInvoicePdfCache(id) {
       invoicePdfCache.delete(key);
     }
   }
+}
+
+/* ============================================================
+ * GST scope
+ *
+ * A role may hold only the gst_invoices.* permissions (the Supervisor role).
+ * Such callers see and touch nothing but invoices flagged is_gst_bill, and every
+ * invoice they create or edit must keep the GST line item.
+ * ============================================================ */
+
+const GST_FILTER = { is_gst_bill: { $in: [1, true, '1'] } };
+const GST_SCOPE_MESSAGE = 'Your role can only work with GST invoices.';
+const GST_REQUIRED_MESSAGE = 'Your role can only save GST invoices. Add the "GST" product as a line item.';
+
+function isGstInvoice(doc) {
+  return doc?.is_gst_bill === 1 || doc?.is_gst_bill === true || doc?.is_gst_bill === '1';
+}
+
+/**
+ * True when the caller is GST-scoped for `action` and the invoice `id` is not a
+ * GST bill. A missing invoice is not "blocked" so the handler can 404 as usual.
+ */
+async function blockedByGstScope(req, action, id) {
+  if (!gstOnly(req, action)) return false;
+  const doc = await collection('invoices').findOne({ id }, { projection: { is_gst_bill: 1 } });
+  return doc ? !isGstInvoice(doc) : false;
 }
 
 /* ============================================================
@@ -214,6 +252,9 @@ async function list(req, res) {
     matchConditions.push({ customer_id: numericId(customer_id) });
   }
 
+  const gstScoped = gstOnly(req, 'view');
+  if (gstScoped) matchConditions.push(GST_FILTER);
+
   const pipeline = [{ $match: { $and: matchConditions } }, ...customerLookup()];
   const postMatch = [];
 
@@ -242,7 +283,9 @@ async function list(req, res) {
   const filteredTotal = result.count[0]?.total || 0;
 
   // Both counts are cached — no extra DB roundtrips on normal page loads
-  const [totalTrashCount, totalActive] = await Promise.all([totalTrash(), totalInvoices()]);
+  const [totalTrashCount, totalActive] = gstScoped
+    ? await Promise.all([totalGstTrash(), totalGstInvoices()])
+    : await Promise.all([totalTrash(), totalInvoices()]);
 
   const nowMs = Date.now();
   const data = (result.data || []).map((row) => {
@@ -307,6 +350,7 @@ async function getInvoiceWithItems(id) {
 async function getOne(req, res) {
   const invoice = await getInvoiceWithItems(numericId(req.params.id));
   if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
+  if (gstOnly(req, 'view') && !isGstInvoice(invoice)) return res.status(403).json({ message: GST_SCOPE_MESSAGE });
   res.json(invoice);
 }
 
@@ -346,11 +390,15 @@ function validatePayload(body) {
   return null;
 }
 
+const isGstName = (name) => String(name || '').trim().toUpperCase() === 'GST';
+
 async function isGstBill(items) {
+  // A line may reference the GST product by id or, when typed in, by name.
+  if (items.some((item) => !numericId(item.product_id) && isGstName(item.product_id))) return true;
   const pIds = items.map((item) => numericId(item.product_id)).filter(Boolean);
   if (!pIds.length) return false;
   const products = await collection('products').find({ id: { $in: pIds } }).toArray();
-  return products.some((product) => product.productname === 'GST');
+  return products.some((product) => isGstName(product.productname));
 }
 
 async function itemDocuments(invoiceId, items = []) {
@@ -441,10 +489,9 @@ async function create(req, res) {
     }
     if (!customer) return res.status(400).json({ message: 'Selected company/customer was not found. Please choose or enter an existing customer.' });
 
-    const [gstBill, docs] = await Promise.all([
-      isGstBill(items),
-      itemDocuments(id, items),
-    ]);
+    const gstBill = await isGstBill(items);
+    if (gstOnly(req, 'create') && !gstBill) return res.status(400).json({ message: GST_REQUIRED_MESSAGE });
+    const docs = await itemDocuments(id, items);
 
     await collection('invoices').insertOne({
       id,
@@ -488,6 +535,8 @@ async function update(req, res) {
   try {
     const existing = await collection('invoices').findOne({ id });
     if (!existing) return res.status(404).json({ message: 'Invoice not found' });
+    const gstScoped = gstOnly(req, 'edit');
+    if (gstScoped && !isGstInvoice(existing)) return res.status(403).json({ message: GST_SCOPE_MESSAGE });
     const currentVersion = Number(existing.version || 0);
     if (expected_version !== undefined && expected_version !== null && Number(expected_version) !== currentVersion) {
       return res.status(409).json({ message: 'This invoice was changed by someone else while you were editing. Reopen it to see the current version.' });
@@ -509,10 +558,9 @@ async function update(req, res) {
     }
     if (!customer) return res.status(400).json({ message: 'Customer not found' });
 
-    const [gstBill, docs] = await Promise.all([
-      isGstBill(items),
-      itemDocuments(id, items),
-    ]);
+    const gstBill = await isGstBill(items);
+    if (gstScoped && !gstBill) return res.status(400).json({ message: GST_REQUIRED_MESSAGE });
+    const docs = await itemDocuments(id, items);
 
     await collection('invoices').updateOne(
       { id },
@@ -550,6 +598,7 @@ async function update(req, res) {
 async function patchStatus(req, res) {
   if (!req.body.status) return res.status(400).json({ message: 'status is required' });
   const id = numericId(req.params.id);
+  if (await blockedByGstScope(req, 'edit', id)) return res.status(403).json({ message: GST_SCOPE_MESSAGE });
   const newStatus = (req.body.status && String(req.body.status).toLowerCase() === 'pending') ? 'Unpaid' : req.body.status;
   const result = await collection('invoices').updateOne({ id }, { $set: { status: newStatus, updated_at: now() } });
   if (!result.matchedCount) return res.status(404).json({ message: 'Invoice not found' });
@@ -561,6 +610,7 @@ async function patchStatus(req, res) {
 // Move to trash (soft delete)
 async function remove(req, res) {
   const id = numericId(req.params.id);
+  if (await blockedByGstScope(req, 'delete', id)) return res.status(403).json({ message: GST_SCOPE_MESSAGE });
   const result = await collection('invoices').updateOne(
     { id },
     { $set: { is_deleted: true, deleted_at: now(), updated_at: now() } }
@@ -574,6 +624,7 @@ async function remove(req, res) {
 // Restore from trash
 async function restore(req, res) {
   const id = numericId(req.params.id);
+  if (await blockedByGstScope(req, 'delete', id)) return res.status(403).json({ message: GST_SCOPE_MESSAGE });
   const result = await collection('invoices').updateOne(
     { id },
     { $set: { is_deleted: false, deleted_at: null, updated_at: now() } }
@@ -587,6 +638,7 @@ async function restore(req, res) {
 // Permanent delete from trash
 async function permanentDelete(req, res) {
   const id = numericId(req.params.id);
+  if (await blockedByGstScope(req, 'delete', id)) return res.status(403).json({ message: GST_SCOPE_MESSAGE });
   const result = await collection('invoices').deleteOne({ id });
   if (!result.deletedCount) return res.status(404).json({ message: 'Invoice not found' });
   await collection('invoice_items').deleteMany({ invoice_id: id });
@@ -626,6 +678,7 @@ async function print(req, res) {
   ]);
 
   if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
+  if (gstOnly(req, 'print') && !isGstInvoice(invoice)) return res.status(403).json({ message: GST_SCOPE_MESSAGE });
 
   const cacheKey = getInvoicePdfCacheKey(invoice);
   const etag = computeETag(cacheKey);
@@ -677,6 +730,7 @@ async function emailInvoice(req, res) {
     getCompanySettings(),
   ]);
   if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
+  if (gstOnly(req, 'print') && !isGstInvoice(invoice)) return res.status(403).json({ message: GST_SCOPE_MESSAGE });
 
   // "To" — one or many addresses; falls back to the customer's email on file.
   let toList = parseEmails(req.body?.email ?? req.body?.to);

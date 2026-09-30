@@ -39,8 +39,10 @@ export default function Dashboard() {
           <div className="eyebrow">{displayName ? `Welcome back, ${displayName}` : 'Welcome back'}</div>
           <h1>Dashboard</h1>
         </div>
-        {hasPermission('invoices.create') && (
-          <Link className="btn btn-primary" to="/invoices/add">Create Invoice</Link>
+        {hasPermission('invoices.create', 'gst_invoices.create') && (
+          <Link className="btn btn-primary" to="/invoices/add">
+            {hasPermission('invoices.create') ? 'Create Invoice' : 'Create GST Invoice'}
+          </Link>
         )}
       </div>
 

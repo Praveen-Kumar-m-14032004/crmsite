@@ -1,4 +1,4 @@
-const { collection, nextId, now, numericId } = require('../utils/mongo');
+const { collection, nextId, now, numericId, syncCounter } = require('../utils/mongo');
 
 async function list(req, res) {
   const { search = '', page = 1, limit = 10 } = req.query;
@@ -21,8 +21,10 @@ async function getOne(req, res) {
 }
 
 async function create(req, res) {
-  const { productname } = req.body;
+  const productname = String(req.body.productname || '').trim();
   if (!productname) return res.status(400).json({ message: 'Product name is required' });
+  // Seeded products were written with fixed ids 1-8 that bypass the counter.
+  await syncCounter('products');
   const product = { id: await nextId('products'), productname, created_at: now() };
   await collection('products').insertOne(product);
   res.status(201).json(product);

@@ -2,6 +2,8 @@ import api from './axios';
 
 export const authApi = {
   login: (username, password) => api.post('/auth/login', { username, password }),
+  // Current account with its live permissions (role edits apply without re-login).
+  me: () => api.get('/auth/me'),
 };
 
 export const dashboardApi = {

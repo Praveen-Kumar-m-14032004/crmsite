@@ -7,20 +7,15 @@ const asyncHandler = require('../utils/asyncHandler');
 const router = express.Router();
 router.use(authenticate);
 
-// Allow either quotations.* or fallback to invoices.* permissions
-const canView = requirePermission(['quotations.view', 'invoices.view']);
-const canCreate = requirePermission(['quotations.create', 'invoices.create']);
-const canEdit = requirePermission(['quotations.edit', 'invoices.edit']);
-const canDelete = requirePermission(['quotations.delete', 'invoices.delete']);
-const canPrint = requirePermission(['quotations.print', 'invoices.print', 'quotations.view', 'invoices.view']);
-
-router.get('/next-number', canView, asyncHandler(ctrl.nextNumber));
-router.get('/', canView, asyncHandler(ctrl.list));
-router.post('/', canCreate, asyncHandler(ctrl.create));
-router.get('/:id', canView, asyncHandler(ctrl.getOne));
-router.put('/:id', canEdit, asyncHandler(ctrl.update));
-router.delete('/:id', canDelete, asyncHandler(ctrl.remove));
-router.get('/:id/pdf', canPrint, asyncHandler(ctrl.getPdf));
-router.get('/:id/print', canPrint, asyncHandler(ctrl.getPdf));
+// Quotations have their own row in the permission matrix; invoice permissions no
+// longer grant quotation access implicitly.
+router.get('/next-number', requirePermission('quotations.view'), asyncHandler(ctrl.nextNumber));
+router.get('/', requirePermission('quotations.view'), asyncHandler(ctrl.list));
+router.post('/', requirePermission('quotations.create'), asyncHandler(ctrl.create));
+router.get('/:id', requirePermission('quotations.view'), asyncHandler(ctrl.getOne));
+router.put('/:id', requirePermission('quotations.edit'), asyncHandler(ctrl.update));
+router.delete('/:id', requirePermission('quotations.delete'), asyncHandler(ctrl.remove));
+router.get('/:id/pdf', requirePermission('quotations.print'), asyncHandler(ctrl.getPdf));
+router.get('/:id/print', requirePermission('quotations.print'), asyncHandler(ctrl.getPdf));
 
 module.exports = router;

@@ -6,6 +6,8 @@ import {
   ProductsIcon, QuotationIcon, ReportsIcon, SettingsIcon, TrashIcon, UsersIcon,
 } from '../common/Icons';
 
+// `permission` may be a single code or a list; the item shows when the account
+// holds ANY of them. `gstLabel` is used instead of `label` for GST-only accounts.
 const MENU = [
   { type: 'label', label: 'Home' },
   { type: 'link', label: 'Dashboard', to: '/dashboard', permission: 'dashboard.view', icon: DashboardIcon },
@@ -24,21 +26,21 @@ const MENU = [
     ],
   },
   {
-    type: 'group', label: 'Invoice', permission: 'invoices.view', icon: InvoiceIcon,
+    type: 'group', label: 'Invoice', gstLabel: 'GST Invoice', permission: ['invoices.view', 'gst_invoices.view'], icon: InvoiceIcon,
     children: [
-      { label: 'Add Invoice', to: '/invoices/add', permission: 'invoices.create' },
-      { label: 'Manage Invoice', to: '/invoices', permission: 'invoices.view' },
+      { label: 'Add Invoice', gstLabel: 'Add GST Invoice', to: '/invoices/add', permission: ['invoices.create', 'gst_invoices.create'] },
+      { label: 'Manage Invoice', gstLabel: 'Manage GST Invoices', to: '/invoices', permission: ['invoices.view', 'gst_invoices.view'] },
     ],
   },
   {
-    type: 'group', label: 'Quotation', permission: ['quotations.view', 'invoices.view'], icon: QuotationIcon,
+    type: 'group', label: 'Quotation', permission: 'quotations.view', icon: QuotationIcon,
     children: [
-      { label: 'Add Quotation', to: '/estimates/add', permission: ['quotations.create', 'invoices.create'] },
-      { label: 'Manage Quotation', to: '/estimates', permission: ['quotations.view', 'invoices.view'] },
+      { label: 'Add Quotation', to: '/estimates/add', permission: 'quotations.create' },
+      { label: 'Manage Quotation', to: '/estimates', permission: 'quotations.view' },
     ],
   },
   { type: 'link', label: 'Reports', to: '/reports', permission: 'reports.view', icon: ReportsIcon },
-  { type: 'link', label: 'Trash', to: '/invoices/trash', permission: 'invoices.delete', icon: TrashIcon },
+  { type: 'link', label: 'Trash', to: '/invoices/trash', permission: ['invoices.delete', 'gst_invoices.delete'], icon: TrashIcon },
   { type: 'label', label: 'Administration', permission: ['users.manage', 'roles.manage', 'settings.manage'] },
   {
     type: 'group', label: 'User Management', permission: ['users.manage', 'roles.manage'], icon: UsersIcon,
@@ -51,19 +53,15 @@ const MENU = [
   { type: 'link', label: 'Company Settings', to: '/settings', permission: 'settings.manage', icon: SettingsIcon },
 ];
 
-function hasAccess(can, permission) {
-  if (!permission) return true;
-  if (Array.isArray(permission)) return permission.some(can);
-  return can(permission);
-}
-
 function groupIsOpen(item, pathname) {
   return item.children.some((c) => pathname === c.to || pathname.startsWith(`${c.to}/`));
 }
 
 export default function Sidebar({ collapsed, onNavigate }) {
-  const { hasPermission } = useAuth();
+  const { hasPermission, gstOnly } = useAuth();
   const { pathname } = useLocation();
+
+  const text = (item) => (gstOnly && item.gstLabel) || item.label;
 
   const [openGroups, setOpenGroups] = useState(() => {
     const initial = {};
@@ -93,7 +91,7 @@ export default function Sidebar({ collapsed, onNavigate }) {
       </div>
 
       {MENU.map((item) => {
-        if (!hasAccess(hasPermission, item.permission)) return null;
+        if (!hasPermission(item.permission)) return null;
 
         if (item.type === 'label') {
           return <div key={item.label} className="sidebar-section-label">{item.label}</div>;
@@ -109,12 +107,12 @@ export default function Sidebar({ collapsed, onNavigate }) {
               className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}
             >
               <Icon />
-              <span className="label">{item.label}</span>
+              <span className="label">{text(item)}</span>
             </NavLink>
           );
         }
 
-        const visibleChildren = item.children.filter((c) => hasAccess(hasPermission, c.permission));
+        const visibleChildren = item.children.filter((c) => hasPermission(c.permission));
         if (!visibleChildren.length) return null;
 
         const isOpen = Boolean(openGroups[item.label]);
@@ -131,7 +129,7 @@ export default function Sidebar({ collapsed, onNavigate }) {
               onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleGroup(item.label)}
             >
               <Icon />
-              <span className="label">{item.label}</span>
+              <span className="label">{text(item)}</span>
               <ChevronRight className={`sidebar-chevron ${isOpen ? 'open' : ''}`} />
             </div>
 
@@ -145,7 +143,7 @@ export default function Sidebar({ collapsed, onNavigate }) {
                     onClick={onNavigate}
                     className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}
                   >
-                    <span className="label">{child.label}</span>
+                    <span className="label">{text(child)}</span>
                   </NavLink>
                 ))}
               </div>

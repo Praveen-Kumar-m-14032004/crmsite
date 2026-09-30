@@ -4,6 +4,7 @@ import { invoicesApi, settingsApi } from '../../api/endpoints';
 import { openViaApi, prefetchPdf, batchPrefetchPdfs, cancelBatchPrefetch } from '../../api/download';
 import { useDataTable } from '../../hooks/useDataTable';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useAuth } from '../../hooks/AuthContext';
 import { errorMessage, useToast } from '../../hooks/ToastContext';
 import DataTable from '../../components/common/DataTable';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
@@ -34,6 +35,9 @@ function getCachedCurrency() {
 
 export default function ManageInvoice() {
   const can = usePermissions();
+  // GST-only accounts (e.g. Supervisor) see and manage GST invoices exclusively;
+  // the API filters the list and rejects anything else, the UI just says so.
+  const { gstOnly } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();
@@ -166,7 +170,7 @@ export default function ManageInvoice() {
       key: 'action', label: 'Action',
       render: (row) => (
         <div className="row-actions">
-          {can('invoices.print') && (
+          {can('invoices.print', 'gst_invoices.print') && (
             <button className="btn-icon icon-print" title="Print / download PDF"
               disabled={printingId === row.id}
               onMouseEnter={() => prefetchPdf(`/invoices/${row.id}/print`)}
@@ -175,18 +179,18 @@ export default function ManageInvoice() {
               {printingId === row.id ? <SpinnerIcon width={15} height={15} /> : <PrinterIcon width={15} height={15} />}
             </button>
           )}
-          {can('invoices.print') && (
+          {can('invoices.print', 'gst_invoices.print') && (
             <button className="btn-icon icon-email" title="Email invoice to customer"
               onClick={() => setEmailRow(row)}>
               <MailIcon width={15} height={15} />
             </button>
           )}
-          {can('invoices.edit') && (
+          {can('invoices.edit', 'gst_invoices.edit') && (
             <button className="btn-icon icon-edit-orange" title="Edit invoice" onClick={() => navigate(`/invoices/${row.id}/edit`)}>
               <EditIcon width={15} height={15} />
             </button>
           )}
-          {can('invoices.delete') && (
+          {can('invoices.delete', 'gst_invoices.delete') && (
             <button className="btn-icon icon-delete" title="Move to trash" onClick={() => setToDelete(row)}>
               <TrashIcon width={15} height={15} />
             </button>
@@ -228,7 +232,7 @@ export default function ManageInvoice() {
       key: 'action', label: 'Action',
       render: (row) => (
         <div className="row-actions">
-          {can('invoices.delete') && (
+          {can('invoices.delete', 'gst_invoices.delete') && (
             <>
               <button
                 className="btn-icon icon-restore"
@@ -256,9 +260,9 @@ export default function ManageInvoice() {
     <div>
       <div className="page-header">
         <div>
-          <div className="eyebrow">{isTrashRoute ? 'Invoice Trash' : 'Invoice'}</div>
+          <div className="eyebrow">{isTrashRoute ? (gstOnly ? 'GST Invoice Trash' : 'Invoice Trash') : (gstOnly ? 'GST Invoice' : 'Invoice')}</div>
           <h1>
-            {isTrashRoute ? 'Trash Invoices' : 'Manage Invoices'}
+            {isTrashRoute ? (gstOnly ? 'Trash GST Invoices' : 'Trash Invoices') : (gstOnly ? 'Manage GST Invoices' : 'Manage Invoices')}
             {isTrashRoute && counts.trashCount > 0 && (
               <span className="badge badge-danger" style={{ marginLeft: 12, verticalAlign: 'middle' }}>
                 {counts.trashCount} in trash
@@ -266,12 +270,22 @@ export default function ManageInvoice() {
             )}
           </h1>
         </div>
-        {!isTrashRoute && can('invoices.create') && (
+        {!isTrashRoute && can('invoices.create', 'gst_invoices.create') && (
           <Link className="btn btn-primary" to="/invoices/add">
-            <PlusIcon width={15} height={15} /> Add Invoice
+            <PlusIcon width={15} height={15} /> {gstOnly ? 'Add GST Invoice' : 'Add Invoice'}
           </Link>
         )}
       </div>
+
+      {gstOnly && !isTrashRoute && (
+        <div className="trash-banner">
+          <AlertIcon width={17} height={17} style={{ color: 'var(--purple-600)', flexShrink: 0 }} />
+          <div>
+            <strong>GST invoices only.</strong>
+            {' '}Your role can view, create, edit, delete and print invoices that include the GST line item. Other invoices are not shown.
+          </div>
+        </div>
+      )}
 
       {isTrashRoute && (
         <div className="trash-banner">
@@ -288,11 +302,11 @@ export default function ManageInvoice() {
           columns={isTrashRoute ? trashColumns : activeColumns}
           {...table}
           searchPlaceholder={isTrashRoute ? 'Search trash invoices…' : 'Search invoice no, company, contact…'}
-          emptyTitle={isTrashRoute ? 'Trash is empty' : 'No invoices yet'}
+          emptyTitle={isTrashRoute ? 'Trash is empty' : (gstOnly ? 'No GST invoices yet' : 'No invoices yet')}
           emptyMessage={
             isTrashRoute
               ? 'No invoices are currently in the trash.'
-              : 'Raise your first invoice and it will appear here.'
+              : (gstOnly ? 'Raise your first GST invoice and it will appear here.' : 'Raise your first invoice and it will appear here.')
           }
         />
       </div>

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { quotationsApi, settingsApi } from '../../api/endpoints';
 import { openViaApi } from '../../api/download';
 import { errorMessage, useToast } from '../../hooks/ToastContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import { DownloadIcon, EditIcon, PrinterIcon, SpinnerIcon } from '../../components/common/Icons';
 import logoImg from '../../assets/logo.png';
 import { formatDateDMY } from '../../utils/date';
@@ -11,6 +12,7 @@ import { resolveSections, toLines } from '../../utils/quotationSections';
 export default function QuotationView() {
   const { id } = useParams();
   const toast = useToast();
+  const can = usePermissions();
 
   const [quotation, setQuotation] = useState(null);
   const [company, setCompany] = useState({});
@@ -84,16 +86,20 @@ export default function QuotationView() {
       {/* Action bar */}
       <div className="no-print" style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', maxWidth: 860, margin: '0 auto 12px', gap: 10 }}>
         <Link to="/estimates" style={{ color: 'var(--muted)', textDecoration: 'none', fontSize: 14, fontWeight: 500, marginRight: 'auto' }}>← Back to list</Link>
-        <Link to={`/estimates/${quotation.id}/edit`} className="btn btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13 }}>
-          <EditIcon size={14} /> Edit
-        </Link>
+        {can('quotations.edit') && (
+          <Link to={`/estimates/${quotation.id}/edit`} className="btn btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13 }}>
+            <EditIcon size={14} /> Edit
+          </Link>
+        )}
         <button type="button" onClick={handlePrint} className="btn btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13 }}>
           <PrinterIcon size={14} /> Print
         </button>
-        <button type="button" onClick={handleDownloadPdf} className="btn btn-primary" disabled={downloading}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 22px', fontSize: 13, fontWeight: 700, background: NAVY, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
-          {downloading ? <SpinnerIcon size={15} /> : <DownloadIcon size={15} />} Download as PDF
-        </button>
+        {can('quotations.print') && (
+          <button type="button" onClick={handleDownloadPdf} className="btn btn-primary" disabled={downloading}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 22px', fontSize: 13, fontWeight: 700, background: NAVY, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+            {downloading ? <SpinnerIcon size={15} /> : <DownloadIcon size={15} />} Download as PDF
+          </button>
+        )}
       </div>
 
       {/* ===== OFFICIAL QUOTATION DOCUMENT ===== */}

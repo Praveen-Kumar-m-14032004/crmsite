@@ -1,17 +1,13 @@
+/**
+ * Gate a route behind one permission code, or any one of several codes.
+ * There are no implicit fallbacks between modules: what the Roles & Permissions
+ * matrix shows is exactly what the API enforces.
+ */
 function requirePermission(code) {
+  const codes = (Array.isArray(code) ? code : [code]).filter(Boolean);
   return (req, res, next) => {
     const permissions = req.user?.permissions || [];
-    const codes = Array.isArray(code) ? code : [code];
-    const hasAny = codes.some((c) => {
-      if (permissions.includes(c)) return true;
-      if (typeof c === 'string' && c.startsWith('quotations.')) {
-        const invoicePerm = c.replace('quotations.', 'invoices.');
-        if (permissions.includes(invoicePerm)) return true;
-      }
-      return false;
-    });
-
-    if (!hasAny) {
+    if (!codes.some((c) => permissions.includes(c))) {
       return res.status(403).json({ message: `Missing permission: ${codes.join(' or ')}` });
     }
     next();

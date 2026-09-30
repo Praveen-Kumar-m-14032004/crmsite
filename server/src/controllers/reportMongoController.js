@@ -81,6 +81,11 @@ async function generate(req, res) {
   if (!format) return res.json({ data: rows, summary, count, truncated, shown: rows.length });
 
   const suffix = filenameSuffix(filters);
+  // Excel and CSV carry a letterhead (logo / company name and the filters used).
+  const exportContext = async () => ({
+    filters,
+    settings: (await collection('company_settings').findOne({})) || {},
+  });
   if (format === 'pdf') {
     const buffer = await buildPdf(reportPdfDefinition(rows, filters, summary));
     res.setHeader('Content-Type', 'application/pdf');
@@ -88,15 +93,15 @@ async function generate(req, res) {
     return res.send(buffer);
   }
   if (format === 'xlsx') {
-    const buffer = await buildReportExcel(rows, summary);
+    const buffer = await buildReportExcel(rows, summary, await exportContext());
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="invoice-report-${suffix}.xlsx"`);
     return res.send(buffer);
   }
   if (format === 'csv') {
-    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="invoice-report-${suffix}.csv"`);
-    return res.send(buildReportCsv(rows));
+    return res.send(buildReportCsv(rows, await exportContext()));
   }
   return res.status(400).json({ message: 'Invalid format. Use pdf, xlsx, or csv.' });
 }

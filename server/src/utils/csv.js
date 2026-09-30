@@ -1,3 +1,5 @@
+const { reportHeader } = require('./reportMeta');
+
 function csvEscape(value) {
   const str = value === null || value === undefined ? '' : String(value);
 
@@ -14,12 +16,29 @@ function csvEscape(value) {
   return safe;
 }
 
-function buildReportCsv(rows) {
+/**
+ * A CSV file is plain text and cannot contain an image, so the company logo is
+ * represented by a text letterhead above the table: company name, report title,
+ * generated date with invoice count, and the filters used. A blank line separates
+ * it from the column headers.
+ *
+ * @param {Array} rows
+ * @param {{filters?: object, settings?: object}} context  filters used and company settings
+ */
+function buildReportCsv(rows, context = {}) {
+  const header = reportHeader(rows, context);
   const headers = [
     'Invoice No', 'Invoice Date', 'Company Name', 'Sub Amount', 'Status',
   ];
 
-  const lines = [headers.join(',')];
+  const lines = [
+    csvEscape(header.company),
+    csvEscape(header.title),
+    csvEscape(`Generated on ${header.generatedOn} | ${header.countLabel}`),
+    csvEscape(header.filtersLabel),
+    '',
+    headers.join(','),
+  ];
 
   rows.forEach((r) => {
     lines.push([
@@ -31,7 +50,8 @@ function buildReportCsv(rows) {
     ].join(','));
   });
 
-  return lines.join('\n');
+  // Byte-order mark so Excel opens the file as UTF-8 (company names with accents etc.).
+  return `﻿${lines.join('\r\n')}`;
 }
 
 module.exports = { buildReportCsv };

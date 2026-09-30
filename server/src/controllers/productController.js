@@ -1,11 +1,31 @@
 const { collection, nextId, now, numericId, syncCounter } = require('../utils/mongo');
+const { hasPerm } = require('../utils/authz');
+const { GST_PRODUCT_FILTER } = require('../utils/gst');
+
+// Permissions that entitle a caller to the full product list. A caller who reaches
+// the list route without any of them got in through gst_invoices.create/edit only
+// (e.g. Supervisor) and is shown nothing but the GST product they may bill.
+const FULL_LIST_PERMISSIONS = [
+  'products.view',
+  'invoices.create', 'invoices.edit',
+  'quotations.create', 'quotations.edit',
+];
+
+function escapeRegex(str) {
+  return String(str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 async function list(req, res) {
   const { search = '', page = 1, limit = 10 } = req.query;
   const pageNum = Math.max(parseInt(page, 10) || 1, 1);
   const limitNum = Math.max(parseInt(limit, 10) || 10, 1);
   const offset = (pageNum - 1) * limitNum;
-  const filter = search ? { productname: { $regex: search, $options: 'i' } } : {};
+
+  const conditions = [];
+  if (String(search).trim()) conditions.push({ productname: { $regex: escapeRegex(String(search).trim()), $options: 'i' } });
+  if (!FULL_LIST_PERMISSIONS.some((code) => hasPerm(req, code))) conditions.push(GST_PRODUCT_FILTER);
+  const filter = conditions.length ? { $and: conditions } : {};
+
   const [rows, total] = await Promise.all([
     collection('products').find(filter).sort({ created_at: -1, id: -1 }).skip(offset).limit(limitNum).toArray(),
     collection('products').countDocuments(filter),

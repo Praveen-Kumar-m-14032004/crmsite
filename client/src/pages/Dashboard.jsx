@@ -10,7 +10,7 @@ import {
 
 
 export default function Dashboard() {
-  const { user, hasPermission } = useAuth();
+  const { user, hasPermission, gstOnly } = useAuth();
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState('');
 
@@ -24,13 +24,23 @@ export default function Dashboard() {
   const currency = summary?.currency || 'SGD';
   const displayName = user?.name || user?.username || '';
 
-  const cards = [
-    { label: 'Total client', value: summary?.totalClients, icon: StatClientIcon, gradient: 'linear-gradient(135deg,#3fae4a,#2d8f38)' },
-    { label: 'Total Product', value: summary?.totalProducts, icon: StatBoxIcon, gradient: 'linear-gradient(135deg,#9a9a2e,#6f6f19)' },
-    { label: 'Total Invoices', value: summary?.totalInvoices, icon: StatDocIcon, gradient: 'linear-gradient(135deg,#e0287a,#b81c61)' },
-    { label: 'Total GST Bills', value: summary?.totalGstBills, icon: StatGstIcon, gradient: 'linear-gradient(135deg,#8b46e0,#6b1fc9)' },
-    { label: 'Total Revenue', value: summary ? `${currency} ${summary.totalRevenue}` : null, icon: StatRevenueIcon, gradient: 'linear-gradient(135deg,#14b8a6,#0d7c72)' },
-  ];
+  // GST-only accounts (e.g. Supervisor) get figures for GST invoices alone; the
+  // API already limits the numbers, the cards are just labelled to match.
+  const gstScope = summary ? summary.scope === 'gst' : gstOnly;
+
+  const cards = gstScope
+    ? [
+      { label: 'Total client', value: summary?.totalClients, icon: StatClientIcon, gradient: 'linear-gradient(135deg,#3fae4a,#2d8f38)' },
+      { label: 'Total GST Invoices', value: summary?.totalInvoices, icon: StatGstIcon, gradient: 'linear-gradient(135deg,#8b46e0,#6b1fc9)' },
+      { label: 'GST Revenue', value: summary ? `${currency} ${summary.totalRevenue}` : null, icon: StatRevenueIcon, gradient: 'linear-gradient(135deg,#14b8a6,#0d7c72)' },
+    ]
+    : [
+      { label: 'Total client', value: summary?.totalClients, icon: StatClientIcon, gradient: 'linear-gradient(135deg,#3fae4a,#2d8f38)' },
+      { label: 'Total Product', value: summary?.totalProducts, icon: StatBoxIcon, gradient: 'linear-gradient(135deg,#9a9a2e,#6f6f19)' },
+      { label: 'Total Invoices', value: summary?.totalInvoices, icon: StatDocIcon, gradient: 'linear-gradient(135deg,#e0287a,#b81c61)' },
+      { label: 'Total GST Bills', value: summary?.totalGstBills, icon: StatGstIcon, gradient: 'linear-gradient(135deg,#8b46e0,#6b1fc9)' },
+      { label: 'Total Revenue', value: summary ? `${currency} ${summary.totalRevenue}` : null, icon: StatRevenueIcon, gradient: 'linear-gradient(135deg,#14b8a6,#0d7c72)' },
+    ];
 
   return (
     <div>

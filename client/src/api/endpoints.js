@@ -36,6 +36,9 @@ export const invoicesApi = {
   remove: (id) => api.delete(`/invoices/${id}`),
   restore: (id) => api.post(`/invoices/${id}/restore`),
   permanentDelete: (id) => api.delete(`/invoices/${id}/permanent`),
+  // Recipient on file plus the default subject and message for this invoice.
+  emailPreview: (id) => api.get(`/invoices/${id}/email-preview`),
+  // data: { email, cc, subject?, body? } - subject/body omitted means "use the default".
   emailInvoice: (id, data) => api.post(`/invoices/${id}/email`, data),
 };
 

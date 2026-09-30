@@ -9,7 +9,7 @@ router.use(authenticate);
 
 // Each action is allowed for the full invoices permission or its GST-only twin.
 // When only the GST-only permission is held, the controller confines the request
-// to invoices that carry the GST line item (see gstOnly() in utils/authz).
+// to invoices whose every line is the GST product (see utils/authz and utils/gst).
 const can = (action) => requirePermission([`invoices.${action}`, `gst_invoices.${action}`]);
 
 router.get('/next-number', can('view'), asyncHandler(ctrl.nextNumber));
@@ -22,6 +22,7 @@ router.post('/:id/restore', can('delete'), asyncHandler(ctrl.restore));
 router.delete('/:id/permanent', can('delete'), asyncHandler(ctrl.permanentDelete));
 router.delete('/:id', can('delete'), asyncHandler(ctrl.remove));
 router.get('/:id/print', can('print'), asyncHandler(ctrl.print));
+router.get('/:id/email-preview', can('print'), asyncHandler(ctrl.emailPreview));
 router.post('/:id/email', can('print'), asyncHandler(ctrl.emailInvoice));
 
 module.exports = router;

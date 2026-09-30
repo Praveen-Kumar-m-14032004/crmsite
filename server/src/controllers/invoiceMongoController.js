@@ -3,8 +3,9 @@ const { collection, nextId, nextIds, now, numericId, isDuplicateError } = requir
 const { buildPdf, createPdfStream, invoicePdfDefinition } = require('../utils/pdf');
 const { cached, invalidate } = require('../utils/cache');
 const { sendMail, isMailConfigured } = require('../utils/mailer');
-const { buildInvoiceEmail } = require('../utils/invoiceEmail');
+const { buildInvoiceEmail, cleanSubject, cleanBody, MAX_SUBJECT_LENGTH, MAX_BODY_LENGTH } = require('../utils/invoiceEmail');
 const { gstOnly } = require('../utils/authz');
+const { GST_ONLY_FILTER, isGstOnlyInvoice, classifyItems } = require('../utils/gst');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -151,25 +152,26 @@ function invalidateInvoicePdfCache(id) {
  * GST scope
  *
  * A role may hold only the gst_invoices.* permissions (the Supervisor role).
- * Such callers see and touch nothing but invoices flagged is_gst_bill, and every
- * invoice they create or edit must keep the GST line item.
+ * Such callers see and touch nothing but invoices flagged is_gst_only, i.e.
+ * invoices whose every line is the GST product. An invoice that carries any
+ * other product is outside their scope everywhere: list, trash, counts, view,
+ * print, email, edit, delete and restore. Every invoice they save must consist
+ * of GST lines only. See utils/gst.js.
  * ============================================================ */
 
-const GST_FILTER = { is_gst_bill: { $in: [1, true, '1'] } };
+const GST_FILTER = GST_ONLY_FILTER;
 const GST_SCOPE_MESSAGE = 'Your role can only work with GST invoices.';
-const GST_REQUIRED_MESSAGE = 'Your role can only save GST invoices. Add the "GST" product as a line item.';
+const GST_REQUIRED_MESSAGE = 'Your role can only bill the GST product. Every line item must be "GST".';
 
-function isGstInvoice(doc) {
-  return doc?.is_gst_bill === 1 || doc?.is_gst_bill === true || doc?.is_gst_bill === '1';
-}
+const isGstInvoice = isGstOnlyInvoice;
 
 /**
  * True when the caller is GST-scoped for `action` and the invoice `id` is not a
- * GST bill. A missing invoice is not "blocked" so the handler can 404 as usual.
+ * GST-only invoice. A missing invoice is not "blocked" so the handler can 404 as usual.
  */
 async function blockedByGstScope(req, action, id) {
   if (!gstOnly(req, action)) return false;
-  const doc = await collection('invoices').findOne({ id }, { projection: { is_gst_bill: 1 } });
+  const doc = await collection('invoices').findOne({ id }, { projection: { is_gst_only: 1 } });
   return doc ? !isGstInvoice(doc) : false;
 }
 
@@ -199,6 +201,7 @@ const projection = () => ({
   payment_status: 1,
   status: 1,
   is_gst_bill: 1,
+  is_gst_only: 1,
   version: 1,
   created_at: 1,
   updated_at: 1,
@@ -390,17 +393,6 @@ function validatePayload(body) {
   return null;
 }
 
-const isGstName = (name) => String(name || '').trim().toUpperCase() === 'GST';
-
-async function isGstBill(items) {
-  // A line may reference the GST product by id or, when typed in, by name.
-  if (items.some((item) => !numericId(item.product_id) && isGstName(item.product_id))) return true;
-  const pIds = items.map((item) => numericId(item.product_id)).filter(Boolean);
-  if (!pIds.length) return false;
-  const products = await collection('products').find({ id: { $in: pIds } }).toArray();
-  return products.some((product) => isGstName(product.productname));
-}
-
 async function itemDocuments(invoiceId, items = []) {
   if (!items.length) return [];
 
@@ -469,6 +461,12 @@ async function create(req, res) {
   if (invalid) return res.status(400).json({ message: invalid });
   const { invoice_no, invoice_date, customer_id, customer_contact, items, paid_amount, payment_type, payment_status, status } = req.body;
   const { subAmount, dueAmount } = computeTotals(items, paid_amount);
+
+  // Checked before anything is written (ids, customers, products) so a rejected
+  // request from a GST-only account leaves no trace behind.
+  const gst = await classifyItems(items);
+  if (gstOnly(req, 'create') && !gst.gstOnly) return res.status(400).json({ message: GST_REQUIRED_MESSAGE });
+
   const id = await nextId('invoices');
 
   try {
@@ -489,8 +487,6 @@ async function create(req, res) {
     }
     if (!customer) return res.status(400).json({ message: 'Selected company/customer was not found. Please choose or enter an existing customer.' });
 
-    const gstBill = await isGstBill(items);
-    if (gstOnly(req, 'create') && !gstBill) return res.status(400).json({ message: GST_REQUIRED_MESSAGE });
     const docs = await itemDocuments(id, items);
 
     await collection('invoices').insertOne({
@@ -505,7 +501,8 @@ async function create(req, res) {
       payment_type: payment_type || null,
       payment_status: payment_status || null,
       status: (status && String(status).toLowerCase() === 'pending') ? 'Unpaid' : (status || 'Unpaid'),
-      is_gst_bill: gstBill ? 1 : 0,
+      is_gst_bill: gst.gstBill ? 1 : 0,
+      is_gst_only: gst.gstOnly ? 1 : 0,
       is_deleted: false,
       deleted_at: null,
       version: 0,
@@ -537,6 +534,9 @@ async function update(req, res) {
     if (!existing) return res.status(404).json({ message: 'Invoice not found' });
     const gstScoped = gstOnly(req, 'edit');
     if (gstScoped && !isGstInvoice(existing)) return res.status(403).json({ message: GST_SCOPE_MESSAGE });
+    // Checked before customers or products are written; see create().
+    const gst = await classifyItems(items);
+    if (gstScoped && !gst.gstOnly) return res.status(400).json({ message: GST_REQUIRED_MESSAGE });
     const currentVersion = Number(existing.version || 0);
     if (expected_version !== undefined && expected_version !== null && Number(expected_version) !== currentVersion) {
       return res.status(409).json({ message: 'This invoice was changed by someone else while you were editing. Reopen it to see the current version.' });
@@ -558,8 +558,6 @@ async function update(req, res) {
     }
     if (!customer) return res.status(400).json({ message: 'Customer not found' });
 
-    const gstBill = await isGstBill(items);
-    if (gstScoped && !gstBill) return res.status(400).json({ message: GST_REQUIRED_MESSAGE });
     const docs = await itemDocuments(id, items);
 
     await collection('invoices').updateOne(
@@ -576,7 +574,8 @@ async function update(req, res) {
           payment_type: payment_type || null,
           payment_status: payment_status || null,
           status: (status && String(status).toLowerCase() === 'pending') ? 'Unpaid' : (status || (existing.status && String(existing.status).toLowerCase() === 'pending' ? 'Unpaid' : (existing.status || 'Unpaid'))),
-          is_gst_bill: gstBill ? 1 : 0,
+          is_gst_bill: gst.gstBill ? 1 : 0,
+          is_gst_only: gst.gstOnly ? 1 : 0,
           updated_at: now(),
         },
         $inc: { version: 1 },
@@ -715,9 +714,63 @@ async function print(req, res) {
  * Email — send the invoice PDF to the customer's email address
  * ============================================================ */
 
+/**
+ * What the "email invoice" dialog shows before sending: the recipient on file
+ * and the default subject and message generated for this invoice. The user may
+ * edit both; the signature is appended by the server and shown read-only.
+ */
+async function emailPreview(req, res) {
+  const id = numericId(req.params.id);
+  if (!id) return res.status(400).json({ message: 'Invalid invoice ID' });
+
+  const [invoice, settings] = await Promise.all([
+    getInvoiceWithItems(id),
+    getCompanySettings(),
+  ]);
+  if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
+  if (gstOnly(req, 'print') && !isGstInvoice(invoice)) return res.status(403).json({ message: GST_SCOPE_MESSAGE });
+
+  const { defaults, signature } = buildInvoiceEmail(invoice, settings);
+  res.json({
+    to: invoice.customer_email || '',
+    subject: defaults.subject,
+    body: defaults.body,
+    signature,
+    attachment: `Invoice-${invoice.invoice_no || invoice.id}.pdf`,
+    mailConfigured: isMailConfigured(),
+    limits: { subject: MAX_SUBJECT_LENGTH, body: MAX_BODY_LENGTH },
+  });
+}
+
+/**
+ * Read an optional edited subject / message from the request. A field that is
+ * absent means "use the default"; a field that is present must not be blank.
+ */
+function readEmailOverrides(body = {}) {
+  const overrides = {};
+  if (body.subject !== undefined && body.subject !== null) {
+    const subject = cleanSubject(body.subject);
+    if (!subject) return { error: 'Subject cannot be empty.' };
+    if (subject.length > MAX_SUBJECT_LENGTH) return { error: `Subject cannot be longer than ${MAX_SUBJECT_LENGTH} characters.` };
+    overrides.subject = subject;
+  }
+  if (body.body !== undefined && body.body !== null) {
+    const message = cleanBody(body.body);
+    if (!message) return { error: 'Message cannot be empty.' };
+    if (message.length > MAX_BODY_LENGTH) return { error: `Message cannot be longer than ${MAX_BODY_LENGTH} characters.` };
+    overrides.body = message;
+  }
+  return { overrides };
+}
+
 async function emailInvoice(req, res) {
   const id = numericId(req.params.id);
   if (!id) return res.status(400).json({ message: 'Invalid invoice ID' });
+  // Scope first, so a GST-only account learns nothing about an out-of-scope invoice.
+  if (await blockedByGstScope(req, 'print', id)) return res.status(403).json({ message: GST_SCOPE_MESSAGE });
+
+  const { overrides, error: overrideError } = readEmailOverrides(req.body);
+  if (overrideError) return res.status(400).json({ message: overrideError });
 
   if (!isMailConfigured()) {
     return res.status(400).json({
@@ -755,7 +808,7 @@ async function emailInvoice(req, res) {
   }
 
   const buffer = await buildInvoicePdfBuffer(invoice, settings);
-  const { subject, text, html } = buildInvoiceEmail(invoice, settings);
+  const { subject, text, html } = buildInvoiceEmail(invoice, settings, overrides);
 
   try {
     await sendMail({
@@ -778,7 +831,7 @@ async function emailInvoice(req, res) {
   }
 
   const summary = toList.join(', ') + (ccList.length ? ` (cc: ${ccList.join(', ')})` : '');
-  res.json({ message: `Invoice #${invoice.invoice_no} emailed to ${summary}`, to: toList, cc: ccList });
+  res.json({ message: `Invoice #${invoice.invoice_no} emailed to ${summary}`, to: toList, cc: ccList, subject });
 }
 
 module.exports = {
@@ -792,6 +845,7 @@ module.exports = {
   restore,
   permanentDelete,
   print,
+  emailPreview,
   emailInvoice,
   cleanupExpiredTrash,
 };

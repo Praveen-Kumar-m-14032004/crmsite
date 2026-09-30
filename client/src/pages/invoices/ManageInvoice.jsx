@@ -282,7 +282,7 @@ export default function ManageInvoice() {
           <AlertIcon width={17} height={17} style={{ color: 'var(--purple-600)', flexShrink: 0 }} />
           <div>
             <strong>GST invoices only.</strong>
-            {' '}Your role can view, create, edit, delete and print invoices that include the GST line item. Other invoices are not shown.
+            {' '}Your role can view, create, edit, delete and print invoices billed purely for the GST product. Invoices that contain any other product are not shown, here or in the trash.
           </div>
         </div>
       )}

@@ -86,9 +86,12 @@ in the UI (hidden menu items and disabled actions). Admins can create custom rol
 edit the permission matrix under **User Management → Roles & Permissions**.
 
 The matrix has two invoice rows. **Invoices (all)** covers every invoice; **GST invoices
-only** covers just the invoices that contain the `GST` product line. A role that holds only
-the GST permissions (like Supervisor) sees nothing but GST invoices, and every invoice it
-creates or edits must keep the GST line. Roles are re-read on every request, so a change
+only** covers just the invoices whose every line is the `GST` product (stored as
+`is_gst_only`). A role that holds only the GST permissions (like Supervisor) is confined to
+those invoices everywhere: list, trash, counts, view, print, email, edit, delete, restore and
+the dashboard figures. Its invoice form offers only the GST product, and saving any other
+line item is rejected by the API. An invoice that mixes GST with another product belongs to
+the full invoice roles. Roles are re-read on every request, so a change
 saved in the matrix applies to signed-in users within about 30 seconds. Admin always holds
 every permission and cannot be restricted; built-in roles cannot be deleted; a custom role
 cannot be deleted while users are assigned to it.

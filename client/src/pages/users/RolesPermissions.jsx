@@ -15,7 +15,7 @@ const MODULE_META = {
   customers: { label: 'Customers', hint: 'Customer master data' },
   products: { label: 'Products', hint: 'Product / service master data' },
   invoices: { label: 'Invoices (all)', hint: 'Every invoice, GST or not' },
-  gst_invoices: { label: 'GST invoices only', hint: 'Only invoices that contain the GST line item. Use this instead of "Invoices (all)" for GST-only roles such as Supervisor.' },
+  gst_invoices: { label: 'GST invoices only', hint: 'Only invoices whose every line is the GST product; no other product can be seen or billed. Use this instead of "Invoices (all)" for GST-only roles such as Supervisor.' },
   quotations: { label: 'Quotations', hint: 'Estimates sent before invoicing' },
   reports: { label: 'Reports', hint: 'Search and export' },
   users: { label: 'Users', hint: 'Add, edit, deactivate users' },

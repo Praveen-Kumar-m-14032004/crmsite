@@ -11,17 +11,19 @@ import SearchableSelect from '../../components/common/SearchableSelect';
 const today = () => new Date().toISOString().slice(0, 10);
 const emptyItem = () => ({ product_id: '', description: '', rate: '', quantity: 1 });
 const defaultItems = () => Array.from({ length: 6 }, emptyItem);
-// An invoice counts as a GST bill when one of its lines is the "GST" product.
+// GST-only accounts may bill nothing but the "GST" product: every line must be GST.
 const isGstProduct = (p) => String(p?.productname || '').trim().toUpperCase() === 'GST';
-const GST_REQUIRED = 'Your role can only save GST invoices. Add the "GST" product as a line item.';
+const GST_REQUIRED = 'Your role can only bill the GST product. Every line item must be "GST".';
+const MISSING_GST_PRODUCT = 'The "GST" product does not exist yet. Ask an admin to add it under Products.';
 
 export default function AddInvoice() {
   const { id } = useParams();
   const isEdit = Boolean(id);
   const navigate = useNavigate();
   const toast = useToast();
-  // GST-only accounts (e.g. Supervisor) may only create or edit GST invoices;
-  // the API enforces it, the form pre-fills the GST line and warns before saving.
+  // GST-only accounts (e.g. Supervisor) may only create or edit invoices made up
+  // of GST lines. The API enforces it and returns only the GST product to them;
+  // the form starts with a GST line, offers no other product and no free text.
   const { gstOnly } = useAuth();
 
   const [customers, setCustomers] = useState([]);
@@ -77,7 +79,8 @@ export default function AddInvoice() {
           setInvoiceNo(last.data.invoice_no);
           if (gstOnly) {
             const gst = (pRes.data.data || []).find(isGstProduct);
-            if (gst) setItems((prev) => prev.map((it, i) => (i === 0 ? { ...it, product_id: String(gst.id) } : it)));
+            if (gst) setItems([{ ...emptyItem(), product_id: String(gst.id) }]);
+            else setError(MISSING_GST_PRODUCT);
           }
         }
       })
@@ -95,18 +98,19 @@ export default function AddInvoice() {
   const dueAmount = Math.max(subAmount - paid, 0);
 
   const gstProduct = useMemo(() => (products || []).find(isGstProduct) || null, [products]);
-  const hasGstLine = useMemo(() => items.some((it) => {
-    const value = String(it.product_id || '').trim();
-    if (!value) return false;
-    const product = products.find((p) => String(p.id) === value);
-    return product ? isGstProduct(product) : value.toUpperCase() === 'GST';
-  }), [items, products]);
+  // True when there is at least one product line and every product line is GST.
+  const gstLinesOk = useMemo(() => {
+    const lines = items.filter((it) => String(it.product_id || '').trim());
+    return lines.length > 0 && lines.every((it) => {
+      const value = String(it.product_id).trim();
+      const product = products.find((p) => String(p.id) === value);
+      return product ? isGstProduct(product) : value.toUpperCase() === 'GST';
+    });
+  }, [items, products]);
 
-  const freshItems = () => {
-    const rows = defaultItems();
-    if (gstOnly && gstProduct) rows[0] = { ...rows[0], product_id: String(gstProduct.id) };
-    return rows;
-  };
+  // A new line for this account: GST-only accounts always get a GST line.
+  const newItem = () => (gstOnly && gstProduct ? { ...emptyItem(), product_id: String(gstProduct.id) } : emptyItem());
+  const freshItems = () => (gstOnly ? [newItem()] : defaultItems());
 
   const handleCustomerChange = (value) => {
     setCustomerId(value);
@@ -139,7 +143,7 @@ export default function AddInvoice() {
   const updateItem = (idx, field, value) =>
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [field]: value } : it)));
 
-  const addRow = () => setItems((prev) => [...prev, emptyItem()]);
+  const addRow = () => setItems((prev) => [...prev, newItem()]);
   const removeRow = (idx) => setItems((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
 
   const resetForm = () => {
@@ -165,7 +169,7 @@ export default function AddInvoice() {
     if (itemsToSave.some((it) => !it.product_id || !String(it.product_id).trim())) { setError('Every line item needs a product selected.'); return; }
     if (itemsToSave.some((it) => it.rate === '' || it.rate === null || isNaN(Number(it.rate)) || Number(it.rate) < 0)) { setError('Every line item needs a valid rate.'); return; }
     if (itemsToSave.some((it) => !Number(it.quantity) || Number(it.quantity) <= 0)) { setError('Quantity must be greater than zero.'); return; }
-    if (gstOnly && !hasGstLine) { setError(GST_REQUIRED); return; }
+    if (gstOnly && !gstLinesOk) { setError(GST_REQUIRED); return; }
     if (paid > subAmount) { setError('Paid amount cannot be more than the sub amount.'); return; }
 
     setSaving(true);
@@ -310,10 +314,10 @@ export default function AddInvoice() {
           <div className="card-head" style={{ marginBottom: 16 }}>
             <div>
               <div className="card-title">Items</div>
-              {gstOnly && <div className="card-sub">A "GST" line item is required for your role.</div>}
+              {gstOnly && <div className="card-sub">Your role bills the GST product only. Every line item is "GST".</div>}
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              {gstOnly && !hasGstLine && <span className="badge badge-warning">GST line missing</span>}
+              {gstOnly && !gstLinesOk && <span className="badge badge-warning">Only GST lines allowed</span>}
               <span className="badge badge-info badge-plain">{items.length} {items.length === 1 ? 'row' : 'rows'}</span>
             </div>
           </div>
@@ -339,6 +343,7 @@ export default function AddInvoice() {
                         value={item.product_id}
                         onChange={(val) => updateItem(idx, 'product_id', val)}
                         placeholder="Select product…"
+                        allowCustom={!gstOnly}
                       />
                     </td>
                     <td>

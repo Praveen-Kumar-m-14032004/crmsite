@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const { getDb } = require('../config/db');
 const { now, syncCounter } = require('./mongo');
+const { backfillGstOnly } = require('./gst');
 
 const ADMIN_ROLE_ID = 1;
 
@@ -170,6 +171,10 @@ async function seedDefaults(overrideUsername, overridePassword) {
   for (const name of COUNTER_COLLECTIONS) {
     await syncCounter(name);
   }
+
+  // Invoices saved before the GST-only flag existed get it now, so GST-only
+  // accounts see exactly the invoices made up of GST lines and nothing else.
+  await backfillGstOnly();
 }
 
 module.exports = { seedDefaults, permissionRows, roleRows, roleCodes };

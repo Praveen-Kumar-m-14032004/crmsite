@@ -1,11 +1,41 @@
 /**
- * Editable quotation content sections.
+ * Quotation document content: editable text sections, per-section visibility and
+ * per-item visibility. Mirrored on the server in server/src/utils/quotationSections.js.
  *
- * Every quotation document (view + PDF) is built from these sections. New
- * quotations are pre-filled with the defaults below so the whole document is
- * visible and editable, while older quotations that predate this feature fall
- * back to the same defaults.
+ * - Sections are pre-filled with the defaults below for new quotations; older
+ *   quotations that predate a field fall back to the same defaults.
+ * - `visibility` lets each section (and the item Description column) be hidden
+ *   from the quotation view and PDF without losing its text.
+ * - Each line item may carry `hidden: true`; such items stay saved but are left
+ *   out of the document and of the total.
  */
+
+export const VISIBILITY_KEYS = [
+  'doc_title', 'description', 'item_cost', 'turnaround', 'procedures',
+  'operating_hours', 'terms', 'closing_note', 'notes',
+];
+
+export const VISIBILITY_LABELS = {
+  doc_title: 'Document Title',
+  description: 'Description column',
+  item_cost: 'Item Cost',
+  turnaround: 'Permit Turn-Around Time',
+  procedures: 'Procedures',
+  operating_hours: 'Operating Hours',
+  terms: 'Terms & Conditions',
+  closing_note: 'Closing Note',
+  notes: 'Additional Notes',
+};
+
+export function defaultVisibility() {
+  return Object.fromEntries(VISIBILITY_KEYS.map((key) => [key, true]));
+}
+
+/** Stored visibility merged over "everything shown"; unknown or missing keys show. */
+export function resolveVisibility(quotation = {}) {
+  const stored = quotation.visibility && typeof quotation.visibility === 'object' ? quotation.visibility : {};
+  return Object.fromEntries(VISIBILITY_KEYS.map((key) => [key, stored[key] !== false]));
+}
 
 export function buildDefaultSections({
   currency = 'SGD',
@@ -76,4 +106,21 @@ export function toLines(text) {
     .split('\n')
     .map((l) => l.trim())
     .filter(Boolean);
+}
+
+/** Line items that appear on the document (and count towards the total). */
+export function visibleItems(items) {
+  return (Array.isArray(items) ? items : []).filter((it) => it && it.hidden !== true);
+}
+
+/** Rate x quantity, rounded to cents. A missing quantity counts as 1. */
+export function lineTotal(item = {}) {
+  const rate = Number(item.rate) || 0;
+  const quantity = item.quantity === undefined || item.quantity === null ? 1 : Number(item.quantity) || 0;
+  return Math.round(rate * quantity * 100) / 100;
+}
+
+/** Total of the visible line items. */
+export function visibleTotal(items) {
+  return Math.round(visibleItems(items).reduce((sum, it) => sum + lineTotal(it), 0) * 100) / 100;
 }

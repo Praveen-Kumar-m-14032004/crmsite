@@ -3,14 +3,27 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { customersApi, productsApi, quotationsApi, settingsApi } from '../../api/endpoints';
 import { errorMessage, useToast } from '../../hooks/ToastContext';
 import { toDateInputValue } from '../../utils/date';
-import { PlusIcon, SpinnerIcon, TrashIcon } from '../../components/common/Icons';
+import { EyeIcon, EyeOffIcon, PlusIcon, SpinnerIcon, TrashIcon } from '../../components/common/Icons';
 import SearchableSelect from '../../components/common/SearchableSelect';
-import { buildDefaultSections, resolveSections } from '../../utils/quotationSections';
+import {
+  VISIBILITY_LABELS,
+  buildDefaultSections,
+  defaultVisibility,
+  lineTotal,
+  resolveSections,
+  resolveVisibility,
+  visibleTotal,
+} from '../../utils/quotationSections';
 
 const today = () => new Date().toISOString().slice(0, 10);
-const emptyItem = () => ({ product_id: '', productname: '', description: '', rate: '', quantity: 1 });
+const emptyItem = () => ({ product_id: '', productname: '', description: '', rate: '', quantity: 1, hidden: false });
 const defaultItems = () => Array.from({ length: 4 }, emptyItem);
 const emptyTurn = () => ({ priority: '', timing: '' });
+
+// Document sections that can be shown or hidden (the Description column toggle
+// lives with the items table).
+const SECTION_KEYS = ['doc_title', 'item_cost', 'turnaround', 'procedures', 'operating_hours', 'terms', 'closing_note', 'notes'];
+
 const sectionTextareaStyle = {
   width: '100%',
   borderRadius: 'var(--r-sm)',
@@ -21,6 +34,22 @@ const sectionTextareaStyle = {
   outline: 'none',
   resize: 'vertical',
 };
+
+/** Show / hide pill. Nothing is deleted when hidden; it is just left off the document. */
+function ShowToggle({ on, onChange, shownLabel = 'Shown', hiddenLabel = 'Hidden' }) {
+  return (
+    <button
+      type="button"
+      className={`vis-toggle${on ? ' on' : ''}`}
+      aria-pressed={on}
+      onClick={() => onChange(!on)}
+      title={on ? 'Shown on the quotation. Click to hide it.' : 'Hidden from the quotation. Click to show it.'}
+    >
+      {on ? <EyeIcon width={13} height={13} /> : <EyeOffIcon width={13} height={13} />}
+      <span>{on ? shownLabel : hiddenLabel}</span>
+    </button>
+  );
+}
 
 export default function AddQuotation() {
   const { id } = useParams();
@@ -39,11 +68,13 @@ export default function AddQuotation() {
   const [quotationDate, setQuotationDate] = useState(today());
   const [customerId, setCustomerId] = useState('');
   const [companyName, setCompanyName] = useState('');
+  const [personIncharge, setPersonIncharge] = useState('');
   const [customerContact, setCustomerContact] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
   const [items, setItems] = useState(defaultItems());
   const [notes, setNotes] = useState('');
   const [sections, setSections] = useState(() => buildDefaultSections());
+  const [visibility, setVisibility] = useState(() => defaultVisibility());
   const [sectionDefaults, setSectionDefaults] = useState(null);
 
   useEffect(() => {
@@ -75,10 +106,12 @@ export default function AddQuotation() {
           setQuotationDate(toDateInputValue(q.quotation_date || q.created_at));
           setCustomerId(q.customer_id ? String(q.customer_id) : (q.companyname || ''));
           setCompanyName(q.companyname || '');
+          setPersonIncharge(q.person_incharge || '');
           setCustomerContact(q.customer_contact || q.mobile_no || '');
           setCustomerAddress(q.address || '');
           setNotes(q.notes || '');
           setSections(resolveSections(q, sectionOpts));
+          setVisibility(resolveVisibility(q));
 
           if (Array.isArray(q.items) && q.items.length) {
             setItems(
@@ -88,6 +121,7 @@ export default function AddQuotation() {
                 description: it.description || '',
                 rate: it.rate !== undefined && it.rate !== null ? String(it.rate) : '',
                 quantity: it.quantity ? String(Number(it.quantity)) : '1',
+                hidden: it.hidden === true,
               }))
             );
           } else {
@@ -96,6 +130,7 @@ export default function AddQuotation() {
         } else {
           setQuotationNo(qRes.data.quotation_no || '');
           setSections(buildDefaultSections(sectionOpts));
+          setVisibility(defaultVisibility());
         }
       })
       .catch((err) => setError(errorMessage(err, 'Could not load quotation form data')))
@@ -108,10 +143,9 @@ export default function AddQuotation() {
     };
   }, [id, isEdit]);
 
-  const subAmount = useMemo(
-    () => items.reduce((sum, it) => sum + (Number(it.rate) || 0) * (Number(it.quantity) || 0), 0),
-    [items]
-  );
+  const subAmount = useMemo(() => visibleTotal(items), [items]);
+  const shownCount = useMemo(() => items.filter((it) => !it.hidden).length, [items]);
+  const hiddenCount = items.length - shownCount;
 
   const customerOptions = useMemo(
     () =>
@@ -139,6 +173,7 @@ export default function AddQuotation() {
     );
     if (cust) {
       setCompanyName(cust.companyname);
+      setPersonIncharge(cust.person_incharge || '');
       setCustomerContact(cust.mobile_no || '');
       setCustomerAddress(cust.address || '');
     } else {
@@ -170,8 +205,13 @@ export default function AddQuotation() {
 
   const addRow = () => setItems((prev) => [...prev, emptyItem()]);
   const removeRow = (index) => setItems((prev) => prev.filter((_, i) => i !== index));
+  const toggleItemHidden = (index) =>
+    setItems((prev) => prev.map((it, i) => (i === index ? { ...it, hidden: !it.hidden } : it)));
 
   const updateSection = (field, value) => setSections((prev) => ({ ...prev, [field]: value }));
+  const setVis = (key, on) => setVisibility((prev) => ({ ...prev, [key]: on }));
+  const setAllSections = (on) =>
+    setVisibility((prev) => ({ ...prev, ...Object.fromEntries(SECTION_KEYS.map((key) => [key, on])) }));
 
   const updateTurn = (index, field, value) =>
     setSections((prev) => {
@@ -185,11 +225,19 @@ export default function AddQuotation() {
   const resetForm = () => {
     setCustomerId('');
     setCompanyName('');
+    setPersonIncharge('');
     setCustomerContact('');
     setCustomerAddress('');
     setItems(defaultItems());
     setNotes('');
     setSections(buildDefaultSections(sectionDefaults || { currency }));
+    setVisibility(defaultVisibility());
+    setError('');
+  };
+
+  const fail = (msg) => {
+    setError(msg);
+    toast.error(msg);
   };
 
   const handleSubmit = async (e) => {
@@ -197,22 +245,14 @@ export default function AddQuotation() {
     setError('');
 
     const targetCustomerName = companyName.trim() || String(customerId).trim();
-    if (!targetCustomerName) {
-      const msg = 'Please specify or select a customer';
-      setError(msg);
-      toast.error(msg);
-      return;
-    }
+    if (!targetCustomerName) return fail('Please specify or select a customer');
 
     const itemsToSave = items.filter(
       (it) => it.product_id || it.productname || it.description || Number(it.rate) > 0
     );
-
-    if (itemsToSave.length === 0) {
-      const msg = 'Please add at least one item to the quotation';
-      setError(msg);
-      toast.error(msg);
-      return;
+    if (itemsToSave.length === 0) return fail('Please add at least one item to the quotation');
+    if (itemsToSave.every((it) => it.hidden)) {
+      return fail('At least one line item must be shown on the quotation. Hidden items are not quoted.');
     }
 
     setSaving(true);
@@ -244,7 +284,8 @@ export default function AddQuotation() {
           description: it.description || '',
           rate: Number(it.rate) || 0,
           quantity: Number(it.quantity) || 1,
-          total: Number(((Number(it.rate) || 0) * (Number(it.quantity) || 1)).toFixed(2)),
+          total: lineTotal({ rate: it.rate, quantity: Number(it.quantity) || 1 }),
+          hidden: Boolean(it.hidden),
         };
       });
 
@@ -260,10 +301,11 @@ export default function AddQuotation() {
         quotation_date: quotationDate,
         customer_id: finalCustId,
         companyname: finalCustName,
+        person_incharge: personIncharge.trim(),
         customer_contact: customerContact,
         address: customerAddress,
         items: resolvedItems,
-        sub_amount: resolvedItems.reduce((sum, it) => sum + it.total, 0),
+        sub_amount: visibleTotal(resolvedItems),
         notes: notes.trim(),
         doc_title: (sections.doc_title || '').trim(),
         item_cost: sections.item_cost || '',
@@ -272,23 +314,46 @@ export default function AddQuotation() {
         operating_hours: sections.operating_hours || '',
         terms: cleanTerms,
         closing_note: sections.closing_note || '',
+        visibility,
       };
 
       if (isEdit) {
         await quotationsApi.update(id, payload);
         toast.success(`Quotation #${payload.quotation_no} updated`);
+        navigate(`/estimates/${id}`);
       } else {
-        await quotationsApi.create(payload);
+        const res = await quotationsApi.create(payload);
         toast.success(`Quotation #${payload.quotation_no} created`);
+        navigate(res.data?.id ? `/estimates/${res.data.id}` : '/estimates');
       }
-      navigate('/estimates');
     } catch (err) {
-      const msg = errorMessage(err, 'Could not save this quotation');
-      setError(msg);
-      toast.error(msg);
+      fail(errorMessage(err, 'Could not save this quotation'));
     } finally {
       setSaving(false);
     }
+  };
+
+  /** One editable document section with its show / hide pill. */
+  const sectionBlock = (key, content, hint) => {
+    const on = visibility[key];
+    return (
+      <div className={`doc-section${on ? '' : ' is-hidden'}`}>
+        <div className="doc-section-head">
+          <label htmlFor={on ? key : undefined}>{VISIBILITY_LABELS[key]}</label>
+          <ShowToggle on={on} onChange={(v) => setVis(key, v)} />
+        </div>
+        {on ? (
+          <>
+            {content}
+            {hint && <div className="hint">{hint}</div>}
+          </>
+        ) : (
+          <div className="doc-section-off">
+            Hidden from the quotation. The content is kept and comes back when you show it again.
+          </div>
+        )}
+      </div>
+    );
   };
 
   if (loading) {
@@ -305,6 +370,8 @@ export default function AddQuotation() {
       </div>
     );
   }
+
+  const descriptionShown = visibility.description;
 
   return (
     <div>
@@ -355,6 +422,16 @@ export default function AddQuotation() {
             </div>
 
             <div className="form-field">
+              <label htmlFor="person">Person In-Charge</label>
+              <input
+                id="person"
+                value={personIncharge}
+                onChange={(e) => setPersonIncharge(e.target.value)}
+                placeholder="Auto-filled from customer"
+              />
+            </div>
+
+            <div className="form-field">
               <label htmlFor="contact">Customer Contact No.</label>
               <input
                 id="contact"
@@ -377,7 +454,7 @@ export default function AddQuotation() {
               />
             </div>
 
-            <div className="form-field" style={{ gridColumn: 'span 2' }}>
+            <div className="form-field">
               <label htmlFor="address">Customer Address</label>
               <input
                 id="address"
@@ -393,27 +470,40 @@ export default function AddQuotation() {
           <div className="card-head" style={{ marginBottom: 16 }}>
             <div>
               <div className="card-title">Items</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>
+                Listed on the quotation like an invoice: product, description, unit cost, quantity and total.
+                Use the eye on a row to leave that item off the quotation (and its total) without deleting it.
+              </div>
             </div>
-            <span className="badge badge-info badge-plain">
-              {items.length} {items.length === 1 ? 'row' : 'rows'}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <ShowToggle
+                on={descriptionShown}
+                onChange={(v) => setVis('description', v)}
+                shownLabel="Description column shown"
+                hiddenLabel="Description column hidden"
+              />
+              <span className="badge badge-info badge-plain">
+                {shownCount} of {items.length} shown
+              </span>
+            </div>
           </div>
 
           <div className="line-items table-scroll">
             <table className="line-items-table">
               <thead>
                 <tr>
-                  <th style={{ width: '26%', minWidth: 180 }}>Product</th>
+                  <th style={{ width: '24%', minWidth: 170 }}>Product</th>
                   <th style={{ minWidth: 140 }}>Description</th>
-                  <th style={{ width: '12%', minWidth: 85 }}>Rate</th>
-                  <th style={{ width: '10%', minWidth: 70 }}>Quantity</th>
-                  <th style={{ width: '13%', minWidth: 95 }}>Total ({currency})</th>
+                  <th style={{ width: '11%', minWidth: 85 }}>Rate</th>
+                  <th style={{ width: '9%', minWidth: 70 }}>Quantity</th>
+                  <th style={{ width: '12%', minWidth: 95 }}>Total ({currency})</th>
+                  <th style={{ width: 110 }}>On quotation</th>
                   <th style={{ width: 48 }} aria-label="Actions" />
                 </tr>
               </thead>
               <tbody>
                 {items.map((item, idx) => (
-                  <tr key={idx}>
+                  <tr key={idx} className={item.hidden ? 'row-hidden' : undefined}>
                     <td>
                       <SearchableSelect
                         options={productOptions}
@@ -427,7 +517,7 @@ export default function AddQuotation() {
                         className="line-item-desc"
                         rows={Math.max(1, Math.min(5, (item.description || '').split('\n').length))}
                         value={item.description ?? ''}
-                        placeholder="Enter description..."
+                        placeholder={descriptionShown ? 'Enter description...' : 'Description column is hidden on the quotation'}
                         onChange={(e) => updateItem(idx, 'description', e.target.value)}
                       />
                     </td>
@@ -453,11 +543,10 @@ export default function AddQuotation() {
                       />
                     </td>
                     <td>
-                      <input
-                        readOnly
-                        className="num"
-                        value={((Number(item.rate) || 0) * (Number(item.quantity) || 0)).toFixed(2)}
-                      />
+                      <input readOnly className="num" value={lineTotal(item).toFixed(2)} />
+                    </td>
+                    <td className="row-toggle-cell">
+                      <ShowToggle on={!item.hidden} onChange={() => toggleItemHidden(idx)} />
                     </td>
                     <td>
                       <button
@@ -482,8 +571,13 @@ export default function AddQuotation() {
 
           <div className="totals-panel">
             <div className="form-field" style={{ minWidth: 200 }}>
-              <label>Total Amount ({currency})</label>
+              <label>Total ({currency})</label>
               <input readOnly className="num" value={subAmount.toFixed(2)} style={{ fontWeight: 700 }} />
+              <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 6 }}>
+                {hiddenCount > 0
+                  ? `${hiddenCount} hidden ${hiddenCount === 1 ? 'item is' : 'items are'} not included.`
+                  : 'All line items are included.'}
+              </div>
             </div>
           </div>
         </div>
@@ -494,123 +588,122 @@ export default function AddQuotation() {
             <div>
               <div className="card-title">Quotation document content</div>
               <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>
-                Shown on the quotation view &amp; PDF. Pre-filled with defaults — edit any section as needed.
+                Printed below the items table on the quotation view &amp; PDF. Each section can be edited, or hidden
+                with its eye button. A section left empty is not printed either.
               </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAllSections(true)}>Show all</button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAllSections(false)}>Hide all</button>
             </div>
           </div>
 
-          <div className="form-field" style={{ marginBottom: 18 }}>
-            <label htmlFor="doc_title">Document Title</label>
-            <input
-              id="doc_title"
-              value={sections.doc_title}
-              onChange={(e) => updateSection('doc_title', e.target.value)}
-            />
-          </div>
+          {sectionBlock(
+            'doc_title',
+            <input id="doc_title" value={sections.doc_title} onChange={(e) => updateSection('doc_title', e.target.value)} />
+          )}
 
-          <div className="form-field" style={{ marginBottom: 18 }}>
-            <label htmlFor="item_cost">Item Cost</label>
+          {sectionBlock(
+            'item_cost',
             <textarea
               id="item_cost"
               rows={2}
               value={sections.item_cost}
               onChange={(e) => updateSection('item_cost', e.target.value)}
               style={sectionTextareaStyle}
-            />
-            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>One line per paragraph.</div>
-          </div>
+            />,
+            'One line per paragraph.'
+          )}
 
-          <div style={{ marginBottom: 18 }}>
-            <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6 }}>
-              Permit Turn-Around Time
-            </label>
-            <div className="line-items table-scroll">
-              <table className="line-items-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: '45%', minWidth: 160 }}>Priority</th>
-                    <th style={{ minWidth: 160 }}>Permit Returning Timings</th>
-                    <th style={{ width: 48 }} aria-label="Actions" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {sections.turnaround.map((t, i) => (
-                    <tr key={i}>
-                      <td>
-                        <input
-                          value={t.priority}
-                          onChange={(e) => updateTurn(i, 'priority', e.target.value)}
-                          placeholder="Priority"
-                        />
-                      </td>
-                      <td>
-                        <input
-                          value={t.timing}
-                          onChange={(e) => updateTurn(i, 'timing', e.target.value)}
-                          placeholder="Returning timing"
-                        />
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          className="btn-icon icon-delete"
-                          title="Remove row"
-                          onClick={() => removeTurn(i)}
-                          disabled={sections.turnaround.length === 1}
-                        >
-                          <TrashIcon width={15} height={15} />
-                        </button>
-                      </td>
+          {sectionBlock(
+            'turnaround',
+            <>
+              <div className="line-items table-scroll">
+                <table className="line-items-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '45%', minWidth: 160 }}>Priority</th>
+                      <th style={{ minWidth: 160 }}>Permit Returning Timings</th>
+                      <th style={{ width: 48 }} aria-label="Actions" />
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <button type="button" className="add-row-btn" onClick={addTurn}>
-              <PlusIcon width={15} height={15} /> Add row
-            </button>
-          </div>
+                  </thead>
+                  <tbody>
+                    {sections.turnaround.map((t, i) => (
+                      <tr key={i}>
+                        <td>
+                          <input
+                            value={t.priority}
+                            onChange={(e) => updateTurn(i, 'priority', e.target.value)}
+                            placeholder="Priority"
+                          />
+                        </td>
+                        <td>
+                          <input
+                            value={t.timing}
+                            onChange={(e) => updateTurn(i, 'timing', e.target.value)}
+                            placeholder="Returning timing"
+                          />
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className="btn-icon icon-delete"
+                            title="Remove row"
+                            onClick={() => removeTurn(i)}
+                            disabled={sections.turnaround.length === 1}
+                          >
+                            <TrashIcon width={15} height={15} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <button type="button" className="add-row-btn" onClick={addTurn}>
+                <PlusIcon width={15} height={15} /> Add row
+              </button>
+            </>
+          )}
 
-          <div className="form-field" style={{ marginBottom: 18 }}>
-            <label htmlFor="procedures">Procedures</label>
+          {sectionBlock(
+            'procedures',
             <textarea
               id="procedures"
               rows={4}
               value={sections.procedures}
               onChange={(e) => updateSection('procedures', e.target.value)}
               style={sectionTextareaStyle}
-            />
-            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>One line per paragraph.</div>
-          </div>
+            />,
+            'One line per paragraph.'
+          )}
 
-          <div className="form-field" style={{ marginBottom: 18 }}>
-            <label htmlFor="operating_hours">Operating Hours</label>
+          {sectionBlock(
+            'operating_hours',
             <textarea
               id="operating_hours"
               rows={4}
               value={sections.operating_hours}
               onChange={(e) => updateSection('operating_hours', e.target.value)}
               style={sectionTextareaStyle}
-            />
-            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>One line per paragraph.</div>
-          </div>
+            />,
+            'One line per paragraph.'
+          )}
 
-          <div className="form-field">
-            <label htmlFor="terms">Terms &amp; Conditions</label>
+          {sectionBlock(
+            'terms',
             <textarea
               id="terms"
               rows={7}
               value={(sections.terms || []).join('\n')}
               onChange={(e) => updateSection('terms', e.target.value.split('\n'))}
               style={sectionTextareaStyle}
-            />
-            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
-              One condition per line — each line becomes a bullet point.
-            </div>
-          </div>
+            />,
+            'One condition per line — each line becomes a bullet point.'
+          )}
 
-          <div className="form-field" style={{ marginTop: 18 }}>
-            <label htmlFor="closing_note">Closing Note</label>
+          {sectionBlock(
+            'closing_note',
             <textarea
               id="closing_note"
               rows={2}
@@ -618,26 +711,24 @@ export default function AddQuotation() {
               onChange={(e) => updateSection('closing_note', e.target.value)}
               style={sectionTextareaStyle}
             />
-          </div>
-        </div>
+          )}
 
-        {/* ===== NOTES + ACTIONS ===== */}
-        <div className="card" style={{ marginTop: 20 }}>
-          <div>
-            <label htmlFor="notes" style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6 }}>
-              Additional Notes
-            </label>
+          {sectionBlock(
+            'notes',
             <textarea
               id="notes"
               rows={3}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Enter optional payment terms or quotation notes here..."
+              placeholder="Optional payment terms or quotation notes..."
               style={sectionTextareaStyle}
             />
-          </div>
+          )}
+        </div>
 
-          <div className="form-actions" style={{ marginTop: 24 }}>
+        {/* ===== ACTIONS ===== */}
+        <div className="card" style={{ marginTop: 20 }}>
+          <div className="form-actions" style={{ marginTop: 0 }}>
             <button className="btn btn-primary" type="submit" disabled={saving}>
               {saving ? (
                 <>

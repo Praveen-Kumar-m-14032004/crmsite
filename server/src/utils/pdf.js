@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const PdfPrinter = require('pdfmake');
-const { resolveSections, toLines } = require('./quotationSections');
+const { resolveSections, resolveVisibility, toLines, visibleItems, visibleTotal, lineTotal } = require('./quotationSections');
 
 const FONT_DIR = path.join(__dirname, '..', 'assets', 'fonts');
 const LOGO_PATH = path.join(__dirname, '..', 'assets', 'logo.png');
@@ -654,16 +654,11 @@ function reportPdfDefinition(rows, filters, summary) {
   };
 }
 
+/* ---- Quotation PDF: same layout as the invoice, followed by the quotation sections ---- */
 function quotationPdfDefinition(quotation = {}, settings = {}) {
   const currency = settings.default_currency || 'SGD';
-  const rawItems = Array.isArray(quotation.items) ? quotation.items : [];
-
-  /* Build the two-column PERMIT TYPES table rows */
-  const permitTableRows = rawItems.map((item) => [
-    { text: (item.productname || item.type || '\u2014').toUpperCase(), style: 'cell', alignment: 'left' },
-    { text: `${money(item.rate || item.total || 0)} ${currency}`, style: 'cell', alignment: 'center' },
-  ]);
-
+  const items = visibleItems(quotation.items);
+  const vis = resolveVisibility(quotation);
   const companyName = settings.company_name || 'Permit Declaration';
   const sections = resolveSections(quotation, {
     currency,
@@ -671,177 +666,221 @@ function quotationPdfDefinition(quotation = {}, settings = {}) {
     email: settings.email || 'Ops@permitdeclaration.sg',
     contact: settings.mobile || settings.tel || settings.contact_no || '',
   });
+  // Same font sizing and row padding as the invoice for the same number of lines.
+  const sp = getSpacing(items.length ? items : [{}]);
+  const total = visibleTotal(quotation.items);
 
-  /* Text paragraphs -> pdfmake blocks */
-  const paras = (text, extra = {}) =>
-    toLines(text).map((line) => ({ text: line, fontSize: 9, margin: [0, 0, 0, 3], ...extra }));
+  const rawNo = String(quotation.quotation_no || '');
+  const formattedNo = rawNo.startsWith('#') ? `Quotation ${rawNo}` : `Quotation #${rawNo}`;
 
-  /* Turn-around table rows */
-  const turnaroundRows = (sections.turnaround.length
-    ? sections.turnaround
-    : [{ priority: '—', timing: '—' }]
-  ).map((row) => [
-    { text: row.priority || '', fontSize: 9 },
-    { text: row.timing || '', fontSize: 9, alignment: 'center' },
+  /* ---- Line-items table (Description column can be hidden) ---- */
+  const showDescription = vis.description;
+  const th = (text, alignment) => ({ text, style: 'th', color: '#ffffff', bold: true, alignment });
+  const headerCells = [
+    th('#', 'center'),
+    th('product name', 'left'),
+    ...(showDescription ? [th('Description', 'left')] : []),
+    th(`Unit Cost ${currency}`, 'left'),
+    th('Qty', 'center'),
+    th(`Total ${currency}`, 'right'),
+  ];
+  const widths = showDescription ? [20, 130, '*', 65, 35, 75] : [20, '*', 75, 40, 85];
+  const itemRows = items.map((item, idx) => [
+    { text: String(idx + 1), style: 'cell', alignment: 'center' },
+    { text: formatCellText(item.productname || '').toUpperCase(), style: 'cell', alignment: 'left' },
+    ...(showDescription ? [{ text: formatCellText(item.description || ''), style: 'cell', alignment: 'left' }] : []),
+    { text: money(item.rate), style: 'cell', alignment: 'left' },
+    { text: String(Number(item.quantity || 0)), style: 'cell', alignment: 'center' },
+    { text: money(lineTotal(item)), style: 'cell', alignment: 'right' },
   ]);
+  if (!itemRows.length) {
+    itemRows.push([
+      { text: 'No items listed.', style: 'cell', alignment: 'center', color: MUTED, colSpan: headerCells.length },
+      ...Array(headerCells.length - 1).fill({}),
+    ]);
+  }
+
+  const purpleTable = {
+    fillColor: (rowIndex) => (rowIndex === 0 ? PURPLE : null),
+    hLineWidth: (i) => (i === 0 ? 0 : 0.75),
+    vLineWidth: () => 0,
+    hLineColor: () => PURPLE,
+    paddingTop: (i) => (i === 0 ? 7 : sp.tablePaddingV),
+    paddingBottom: (i) => (i === 0 ? 7 : sp.tablePaddingV),
+    paddingLeft: () => 6,
+    paddingRight: () => 6,
+  };
+
+  /* ---- "From" address block (same as the invoice) ---- */
+  const fromLines = [{ text: settings.company_name || 'Chola Logistics Pte Ltd', style: 'partyName' }];
+  if (settings.address) fromLines.push({ text: settings.address, style: 'partyLine' });
+  const telLine = [
+    settings.tel ? `Tel: ${settings.tel}` : null,
+    settings.mobile ? `HP: ${settings.mobile}` : null,
+  ].filter(Boolean).join(' | ');
+  if (telLine) fromLines.push({ text: telLine, style: 'partyLine' });
+  if (settings.email) fromLines.push({ text: `Email: ${settings.email}`, style: 'partyLine' });
+  if (settings.website) fromLines.push({ text: settings.website, style: 'partyLine' });
+  if (settings.contact_no) fromLines.push({ text: `Contact: ${settings.contact_no}`, style: 'partyLine' });
+
+  /* ---- Quotation sections, each only when shown and not empty ---- */
+  const para = (text) => toLines(text).map((line) => ({ text: line, style: 'sectionText' }));
+  const blocks = [];
+  const section = (shown, title, body) => {
+    if (!shown || !body.length) return;
+    blocks.push({ text: title, style: 'sectionTitle' }, ...body);
+  };
+
+  section(vis.item_cost, 'Item Cost :', para(sections.item_cost));
+  if (vis.turnaround && sections.turnaround.length) {
+    blocks.push({ text: 'PERMIT TURN-AROUND TIME', style: 'sectionTitle', alignment: 'center' });
+    blocks.push({
+      table: {
+        headerRows: 1,
+        dontBreakRows: true,
+        widths: ['55%', '45%'],
+        body: [
+          [th('Priority', 'left'), th('Permit Returning Timings', 'center')],
+          ...sections.turnaround.map((row) => [
+            { text: row.priority || '', style: 'cell' },
+            { text: row.timing || '', style: 'cell', alignment: 'center' },
+          ]),
+        ],
+      },
+      layout: purpleTable,
+      margin: [0, 0, 0, 6],
+    });
+  }
+  section(vis.procedures, 'Procedures :', para(sections.procedures));
+  section(vis.operating_hours, 'Operating Hours :', para(sections.operating_hours));
+  section(
+    vis.terms,
+    'Terms & Conditions :',
+    sections.terms.map((t) => ({ text: `•  ${t}`, style: 'sectionText', margin: [8, 0, 0, 2] }))
+  );
+  if (vis.closing_note && String(sections.closing_note || '').trim()) {
+    blocks.push({ text: sections.closing_note, style: 'sectionText', margin: [0, 8, 0, 0] });
+  }
+  section(vis.notes, 'Additional Notes :', para(quotation.notes));
 
   return {
-    pageSize: 'A4',
-    pageMargins: [40, 35, 40, 30],
+    background: (currentPage, pageSize) => {
+      if (logoBase64) {
+        return [
+          {
+            image: logoBase64,
+            width: 320,
+            opacity: 0.08,
+            absolutePosition: { x: (pageSize.width - 320) / 2, y: 290 },
+          },
+        ];
+      }
+      return null;
+    },
+    footer: () => ({
+      text: 'This is a system generated quotation, no authorized signature needed.',
+      style: 'systemNotice',
+      alignment: 'center',
+      margin: [0, 15, 0, 0],
+    }),
     content: [
-      /* ======== HEADER: Logo left, Date & Quotation No straight to the right ======== */
+      /* ======== HEADER: Logo left, Date + Quotation # to the right ======== */
       {
         columns: [
-          {
-            width: '*',
-            stack: [logoBlock()],
-          },
+          { width: '*', stack: [logoBlock()] },
           {
             width: 'auto',
             stack: [
               {
                 text: [
-                  { text: 'DATE : ', bold: true },
+                  { text: 'Date : ', bold: true },
                   { text: formatDate(quotation.quotation_date || quotation.created_at), bold: true },
                 ],
-                style: 'quotationDate',
+                style: 'dateLine',
                 alignment: 'left',
               },
-              {
-                text: [
-                  { text: 'Quotation No : ', bold: true },
-                  { text: String(quotation.quotation_no || ''), bold: true },
-                ],
-                style: 'quotationNo',
-                alignment: 'left',
-              },
+              { text: formattedNo, style: 'invoiceNo', alignment: 'left' },
             ],
           },
         ],
         margin: [0, 0, 0, 18],
       },
 
-      /* CUSTOMER INFO */
-      { text: (quotation.companyname || '').toUpperCase(), bold: true, fontSize: 11, margin: [0, 0, 0, 3] },
-      ...(quotation.address ? [{
-        text: [
-          { text: 'Address : ', bold: true },
-          { text: quotation.address },
-        ],
-        fontSize: 9.5,
-        margin: [0, 0, 0, 6],
-      }] : []),
+      /* ======== FROM & TO ======== */
       {
         columns: [
-          { width: 120, text: 'Person Incharge', bold: true, fontSize: 9.5 },
-          { width: '*', text: `: ${quotation.person_incharge || 'Person In-Charge'}`, fontSize: 9.5 },
-        ],
-        margin: [0, 0, 0, 1],
-      },
-      {
-        columns: [
-          { width: 120, text: 'Tele', bold: true, fontSize: 9.5 },
-          { width: '*', text: `: ${quotation.customer_contact || quotation.mobile_no || '\u2014'}`, fontSize: 9.5 },
+          { width: 295, stack: [{ text: 'From:', style: 'partyLabel' }, ...fromLines] },
+          {
+            width: 220,
+            stack: [
+              { text: `To: ${quotation.companyname || ''}`, style: 'partyLabel' },
+              { text: `Name: ${quotation.person_incharge || ''}`, style: 'partyName', margin: [0, 4, 0, 2] },
+              { text: `Address: ${quotation.address || ''}`, style: 'partyLine' },
+              { text: `Phone: ${quotation.customer_contact || quotation.mobile_no || ''}`, style: 'partyLine' },
+            ],
+          },
         ],
         margin: [0, 0, 0, 14],
       },
 
-      /* OFFICIAL QUOTATION TITLE */
-      { text: sections.doc_title || '', bold: true, fontSize: 12, alignment: 'center', margin: [0, 0, 0, 10] },
-
-      /* PERMIT TYPES TABLE */
-      {
-        table: {
-          headerRows: 1,
-          widths: ['60%', '40%'],
-          body: [
-            [
-              { text: 'PERMIT TYPES', bold: true, alignment: 'center', fontSize: 9.5, margin: [0, 2, 0, 2] },
-              { text: 'PERMIT CHARGES', bold: true, alignment: 'center', fontSize: 9.5, margin: [0, 2, 0, 2] },
-            ],
-            ...(permitTableRows.length > 0 ? permitTableRows : [[
-              { text: '\u2014', style: 'cell', alignment: 'left' },
-              { text: '0.00 ' + currency, style: 'cell', alignment: 'center' },
-            ]]),
-          ],
-        },
-        layout: {
-          hLineWidth: () => 0.75, vLineWidth: () => 0.75,
-          hLineColor: () => '#333333', vLineColor: () => '#333333',
-          paddingTop: () => 5, paddingBottom: () => 5, paddingLeft: () => 8, paddingRight: () => 8,
-        },
-        margin: [0, 0, 0, 12],
-      },
-
-      /* ITEM COST */
-      { text: 'Item Cost :', bold: true, fontSize: 9.5, margin: [0, 0, 0, 4] },
-      ...(() => {
-        const lines = paras(sections.item_cost);
-        if (lines.length) lines[lines.length - 1].margin = [0, 0, 0, 14];
-        return lines;
-      })(),
-
-      /* PERMIT TURN-AROUND TIME */
-      { text: '(PERMIT TURN-AROUND TIME)', bold: true, fontSize: 10.5, alignment: 'center', margin: [0, 6, 0, 8] },
-      {
-        table: {
-          headerRows: 1,
-          widths: ['55%', '45%'],
-          body: [
-            [
-              { text: 'Priority :', bold: true, alignment: 'center', fontSize: 9.5, margin: [0, 2, 0, 2] },
-              { text: 'Permit Returning Timings :', bold: true, alignment: 'center', fontSize: 9.5, margin: [0, 2, 0, 2] },
-            ],
-            ...turnaroundRows,
-          ],
-        },
-        layout: {
-          hLineWidth: () => 0.75, vLineWidth: () => 0.75,
-          hLineColor: () => '#333333', vLineColor: () => '#333333',
-          paddingTop: () => 5, paddingBottom: () => 5, paddingLeft: () => 8, paddingRight: () => 8,
-        },
-        margin: [0, 0, 0, 14],
-      },
-
-      /* PROCEDURES */
-      { text: 'Procedures :', bold: true, fontSize: 9.5, margin: [0, 0, 0, 4] },
-      ...(() => {
-        const lines = paras(sections.procedures);
-        if (lines.length) lines[lines.length - 1].margin = [0, 0, 0, 10];
-        return lines;
-      })(),
-
-      /* OPERATING HOURS */
-      { text: 'Operating Hours :', bold: true, fontSize: 9.5, margin: [0, 0, 0, 4] },
-      ...(() => {
-        const lines = paras(sections.operating_hours);
-        if (lines.length) lines[lines.length - 1].margin = [0, 0, 0, 10];
-        return lines;
-      })(),
-
-      /* TERMS & CONDITIONS */
-      { text: 'Terms & Conditions :', bold: true, fontSize: 9.5, margin: [0, 0, 0, 4] },
-      ...sections.terms.map((t) => ({ text: `  .  ${t}`, fontSize: 9, margin: [0, 0, 0, 2] })),
-      ...(sections.closing_note
-        ? [{ text: sections.closing_note, fontSize: 9, margin: [0, 4, 0, 0] }]
+      /* ======== DOCUMENT TITLE (optional) ======== */
+      ...(vis.doc_title && String(sections.doc_title || '').trim()
+        ? [{ text: String(sections.doc_title).toUpperCase(), style: 'docTitle' }]
         : []),
+
+      /* ======== LINE-ITEMS TABLE ======== */
+      {
+        table: { headerRows: 1, dontBreakRows: true, widths, body: [headerCells, ...itemRows] },
+        layout: purpleTable,
+      },
+
+      /* ======== TOTAL ======== */
+      {
+        columns: [
+          { width: '*', text: '' },
+          {
+            width: 220,
+            table: {
+              widths: ['*', 'auto'],
+              body: [[
+                { text: 'Total', style: 'totalLabel', border: [false, true, false, true] },
+                { text: money(total), style: 'totalValue', alignment: 'right', border: [false, true, false, true] },
+              ]],
+            },
+            layout: {
+              hLineWidth: () => 0.75,
+              vLineWidth: () => 0,
+              hLineColor: () => PURPLE,
+              paddingTop: () => 8,
+              paddingBottom: () => 8,
+              paddingLeft: () => 8,
+              paddingRight: () => 6,
+            },
+          },
+        ],
+        margin: [0, 4, 0, 0],
+      },
+
+      /* ======== QUOTATION SECTIONS ======== */
+      ...(blocks.length ? [{ stack: blocks, margin: [0, 14, 0, 0] }] : []),
     ],
+
     styles: {
-      wordmark: { fontSize: 13, bold: true, color: PURPLE, lineHeight: 1 },
-      quotationDate: { fontSize: 12, bold: true, color: '#1b2a4a', margin: [0, 0, 0, 3] },
-      quotationNo: { fontSize: 13.5, bold: true, color: '#1b2a4a' },
-      dateLabel: { fontSize: 12, bold: true, color: '#1b2a4a' },
-      invoiceNo: { fontSize: 13.5, bold: true, color: '#1b2a4a' },
-      partyLabel: { fontSize: 9, bold: true, color: PURPLE },
-      partyName: { fontSize: 10, bold: true, color: INK },
-      partyLine: { fontSize: 9, color: INK },
-      th: { fontSize: 9, color: '#ffffff', bold: true },
-      cell: { fontSize: 9, color: INK },
-      totalLabel: { fontSize: 10, bold: true, color: INK },
-      totalValue: { fontSize: 11, bold: true, color: PURPLE },
-      systemNotice: { fontSize: 9, bold: true, color: MUTED, italics: true },
+      wordmark: { fontSize: 15.5, bold: true, color: PURPLE, lineHeight: 1 },
+      dateLine: { fontSize: sp.dateLineSize, bold: true, color: INK, margin: [0, 0, 0, 3] },
+      invoiceNo: { fontSize: sp.invoiceNoSize, bold: true, color: INK },
+      partyLabel: { fontSize: sp.fromFontSize, color: INK, bold: false },
+      partyName: { fontSize: sp.partyNameSize, bold: true, color: INK, margin: [0, 4, 0, 2], lineHeight: 1.25 },
+      partyLine: { fontSize: sp.fromFontSize, color: INK, lineHeight: 1.35 },
+      docTitle: { fontSize: 11.5, bold: true, color: INK, alignment: 'center', margin: [0, 2, 0, 10] },
+      th: { fontSize: sp.thFontSize, color: '#ffffff', bold: true },
+      cell: { fontSize: sp.cellFontSize, color: INK, lineHeight: 1.25 },
+      totalLabel: { fontSize: 10, color: INK },
+      totalValue: { fontSize: 10.5, bold: true, color: INK },
+      sectionTitle: { fontSize: 9.5, bold: true, color: INK, margin: [0, 10, 0, 4] },
+      sectionText: { fontSize: 9, color: INK, lineHeight: 1.3, margin: [0, 0, 0, 3] },
+      systemNotice: { fontSize: 10, bold: true, color: INK, italics: true },
     },
-    defaultStyle: { font: 'Lato', fontSize: 9, color: INK },
   };
 }
 

@@ -1,9 +1,27 @@
 /**
- * Editable quotation content sections (server mirror of the client util).
+ * Quotation document content (server mirror of client/src/utils/quotationSections.js).
  *
- * Defaults are used to render the PDF for quotations that predate the editable
- * sections feature and to fill any missing field.
+ * - Sections: editable text blocks with defaults for quotations that predate them.
+ * - `visibility`: per-section (and Description column) show/hide flags; a missing
+ *   key means "shown".
+ * - Line items may carry `hidden: true`: kept in the record, left out of the
+ *   document and of the total.
  */
+
+const VISIBILITY_KEYS = [
+  'doc_title', 'description', 'item_cost', 'turnaround', 'procedures',
+  'operating_hours', 'terms', 'closing_note', 'notes',
+];
+
+function defaultVisibility() {
+  return Object.fromEntries(VISIBILITY_KEYS.map((key) => [key, true]));
+}
+
+/** Stored visibility merged over "everything shown"; unknown or missing keys show. */
+function resolveVisibility(quotation = {}) {
+  const stored = quotation.visibility && typeof quotation.visibility === 'object' ? quotation.visibility : {};
+  return Object.fromEntries(VISIBILITY_KEYS.map((key) => [key, stored[key] !== false]));
+}
 
 function buildDefaultSections({
   currency = 'SGD',
@@ -73,4 +91,31 @@ function toLines(text) {
     .filter(Boolean);
 }
 
-module.exports = { buildDefaultSections, resolveSections, toLines };
+/** Line items that appear on the document (and count towards the total). */
+function visibleItems(items) {
+  return (Array.isArray(items) ? items : []).filter((it) => it && it.hidden !== true);
+}
+
+/** Rate x quantity, rounded to cents. A missing quantity counts as 1. */
+function lineTotal(item = {}) {
+  const rate = Number(item.rate) || 0;
+  const quantity = item.quantity === undefined || item.quantity === null ? 1 : Number(item.quantity) || 0;
+  return Math.round(rate * quantity * 100) / 100;
+}
+
+/** Total of the visible line items. */
+function visibleTotal(items) {
+  return Math.round(visibleItems(items).reduce((sum, it) => sum + lineTotal(it), 0) * 100) / 100;
+}
+
+module.exports = {
+  VISIBILITY_KEYS,
+  defaultVisibility,
+  resolveVisibility,
+  buildDefaultSections,
+  resolveSections,
+  toLines,
+  visibleItems,
+  lineTotal,
+  visibleTotal,
+};

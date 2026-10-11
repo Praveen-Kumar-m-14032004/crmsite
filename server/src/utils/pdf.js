@@ -659,11 +659,11 @@ function quotationPdfDefinition(quotation = {}, settings = {}) {
   const currency = settings.default_currency || 'SGD';
   const items = visibleItems(quotation.items);
   const vis = resolveVisibility(quotation);
-  const companyName = settings.company_name || 'Permit Declaration';
+  const companyName = settings.company_name || 'Chola Logistics Pte Ltd';
   const sections = resolveSections(quotation, {
     currency,
     companyName,
-    email: settings.email || 'Ops@permitdeclaration.sg',
+    email: settings.email || 'accounts@permitdeclaration.com.sg',
     contact: settings.mobile || settings.tel || settings.contact_no || '',
   });
   // Same font sizing and row padding as the invoice for the same number of lines.

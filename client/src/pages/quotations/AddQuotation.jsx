@@ -94,8 +94,8 @@ export default function AddQuotation() {
 
         const sectionOpts = {
           currency: settings.default_currency || 'SGD',
-          companyName: settings.company_name || 'Permit Declaration',
-          email: settings.email || 'Ops@permitdeclaration.sg',
+          companyName: settings.company_name || 'Chola Logistics Pte Ltd',
+          email: settings.email || 'accounts@permitdeclaration.com.sg',
           contact: settings.mobile || settings.tel || settings.contact_no || '',
         };
         setSectionDefaults(sectionOpts);
@@ -680,10 +680,10 @@ export default function AddQuotation() {
             'closing_note',
             <textarea
               id="closing_note"
-              rows={2}
+              rows={4}
               value={sections.closing_note}
               onChange={(e) => updateSection('closing_note', e.target.value)}
-              style={sectionTextareaStyle}
+              style={{ ...sectionTextareaStyle, minHeight: 88 }}
             />
           )}
 

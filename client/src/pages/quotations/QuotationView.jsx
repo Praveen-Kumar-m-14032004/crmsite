@@ -89,13 +89,13 @@ export default function QuotationView() {
   }
 
   const currency = company.default_currency || 'SGD';
-  const companyName = company.company_name || 'Permit Declaration';
+  const companyName = company.company_name || 'Chola Logistics Pte Ltd';
   const items = visibleItems(quotation.items);
   const vis = resolveVisibility(quotation);
   const sections = resolveSections(quotation, {
     currency,
     companyName,
-    email: company.email || 'Ops@permitdeclaration.sg',
+    email: company.email || 'accounts@permitdeclaration.com.sg',
     contact: company.mobile || company.tel || company.contact_no || '',
   });
   const total = visibleTotal(quotation.items);
@@ -247,7 +247,9 @@ export default function QuotationView() {
           )}
 
           {vis.closing_note && String(sections.closing_note || '').trim() && (
-            <p style={{ ...para, marginTop: 10 }}>{sections.closing_note}</p>
+            <div style={{ ...para, marginTop: 12, whiteSpace: 'pre-line', lineHeight: 1.6 }}>
+              {sections.closing_note}
+            </div>
           )}
 
           {renderSection(vis.notes, 'Additional Notes :', toLines(quotation.notes))}

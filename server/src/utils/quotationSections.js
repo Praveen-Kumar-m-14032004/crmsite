@@ -25,8 +25,8 @@ function resolveVisibility(quotation = {}) {
 
 function buildDefaultSections({
   currency = 'SGD',
-  companyName = 'Permit Declaration',
-  email = 'Ops@permitdeclaration.sg',
+  companyName = 'Chola Logistics Pte Ltd',
+  email = 'accounts@permitdeclaration.com.sg',
   contact = '',
 } = {}) {
   return {
@@ -60,7 +60,7 @@ function buildDefaultSections({
       'Unless otherwise stated, this quotation is valid for 10 days from the date of issue.',
     ],
     closing_note:
-      `Thank you for choosing ${companyName} Permit Declaration Services. ` +
+      `Thank you for choosing ${companyName} Permit Declaration Services.\n\n` +
       'We look forward to serving you with fast, reliable, and professional support 24/7.',
   };
 }

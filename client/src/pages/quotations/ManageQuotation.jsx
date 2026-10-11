@@ -107,13 +107,6 @@ export default function ManageQuotation() {
       render: (r) => <span className="num">{r.customer_contact || r.mobile_no || '—'}</span>,
     },
     {
-      key: 'sub_amount',
-      label: `Total (${currency})`,
-      sortable: true,
-      align: 'right',
-      render: (r) => <span className="num cell-strong">{Number(r.sub_amount || 0).toFixed(2)}</span>,
-    },
-    {
       key: 'actions',
       label: 'Actions',
       align: 'right',

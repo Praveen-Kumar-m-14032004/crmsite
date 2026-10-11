@@ -120,7 +120,7 @@ export default function AddQuotation() {
                 productname: it.productname || '',
                 description: it.description || '',
                 rate: it.rate !== undefined && it.rate !== null ? String(it.rate) : '',
-                quantity: it.quantity != null ? String(Number(it.quantity) || 1) : '1',
+                quantity: 1,
                 hidden: it.hidden === true,
               }))
             );
@@ -278,13 +278,14 @@ export default function AddQuotation() {
         const existingProd = products.find(
           (p) => String(p.id) === trimmedProd || p.productname?.toLowerCase().trim() === trimmedProd.toLowerCase()
         );
+        const rate = Number(it.rate) || 0;
         return {
           product_id: existingProd ? existingProd.id : (Number(trimmedProd) || null),
           productname: existingProd ? existingProd.productname : (it.productname || trimmedProd),
           description: it.description || '',
-          rate: Number(it.rate) || 0,
-          quantity: Number(it.quantity) || 1,
-          total: lineTotal({ rate: it.rate, quantity: Number(it.quantity) || 1 }),
+          rate,
+          quantity: 1,
+          total: rate,
           hidden: Boolean(it.hidden),
         };
       });
@@ -471,8 +472,8 @@ export default function AddQuotation() {
             <div>
               <div className="card-title">Items</div>
               <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>
-                Listed on the quotation like an invoice: product, description, unit cost, quantity and total.
-                Use the eye on a row to leave that item off the quotation (and its total) without deleting it.
+                Listed on the quotation: product, description, and rate.
+                Use the eye on a row to leave that item off the quotation without deleting it.
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -492,11 +493,9 @@ export default function AddQuotation() {
             <table className="line-items-table">
               <thead>
                 <tr>
-                  <th style={{ width: '24%', minWidth: 170 }}>Product</th>
+                  <th style={{ width: '28%', minWidth: 170 }}>Product</th>
                   <th style={{ minWidth: 140 }}>Description</th>
-                  <th style={{ width: '11%', minWidth: 85 }}>Rate</th>
-                  <th style={{ width: '9%', minWidth: 70 }}>Quantity</th>
-                  <th style={{ width: '12%', minWidth: 95 }}>Total ({currency})</th>
+                  <th style={{ width: '16%', minWidth: 100 }}>Rate ({currency})</th>
                   <th style={{ width: 110 }}>On quotation</th>
                   <th style={{ width: 48 }} aria-label="Actions" />
                 </tr>
@@ -532,19 +531,6 @@ export default function AddQuotation() {
                         placeholder="0.00"
                       />
                     </td>
-                    <td>
-                      <input
-                        type="number"
-                        step="1"
-                        min="1"
-                        inputMode="numeric"
-                        value={item.quantity}
-                        onChange={(e) => updateItem(idx, 'quantity', e.target.value)}
-                      />
-                    </td>
-                    <td>
-                      <input readOnly className="num" value={lineTotal(item).toFixed(2)} />
-                    </td>
                     <td className="row-toggle-cell">
                       <ShowToggle on={!item.hidden} onChange={() => toggleItemHidden(idx)} />
                     </td>
@@ -568,18 +554,6 @@ export default function AddQuotation() {
           <button type="button" className="add-row-btn" onClick={addRow}>
             <PlusIcon width={15} height={15} /> Add line item
           </button>
-
-          <div className="totals-panel">
-            <div className="form-field" style={{ minWidth: 200 }}>
-              <label>Total ({currency})</label>
-              <input readOnly className="num" value={subAmount.toFixed(2)} style={{ fontWeight: 700 }} />
-              <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 6 }}>
-                {hiddenCount > 0
-                  ? `${hiddenCount} hidden ${hiddenCount === 1 ? 'item is' : 'items are'} not included.`
-                  : 'All line items are included.'}
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* ===== EDITABLE DOCUMENT CONTENT ===== */}

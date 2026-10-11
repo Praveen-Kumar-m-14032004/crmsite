@@ -189,36 +189,24 @@ export default function QuotationView() {
               <th style={{ ...th, textAlign: 'center', width: 36 }}>#</th>
               <th style={th}>product name</th>
               {showDescription && <th style={th}>Description</th>}
-              <th style={th}>Unit Cost {currency}</th>
-              <th style={{ ...th, textAlign: 'center' }}>Qty</th>
-              <th style={{ ...th, textAlign: 'right' }}>Total {currency}</th>
+              <th style={{ ...th, textAlign: 'right' }}>Unit Cost {currency}</th>
             </tr>
           </thead>
           <tbody>
             {items.length === 0 ? (
               <tr>
-                <td colSpan={showDescription ? 6 : 5} style={{ ...td, textAlign: 'center', color: MUTED }}>No items listed.</td>
+                <td colSpan={showDescription ? 4 : 3} style={{ ...td, textAlign: 'center', color: MUTED }}>No items listed.</td>
               </tr>
             ) : items.map((it, idx) => (
               <tr key={idx}>
                 <td style={{ ...td, textAlign: 'center' }}>{idx + 1}</td>
                 <td style={{ ...td, textTransform: 'uppercase' }}>{it.productname || '—'}</td>
                 {showDescription && <td style={{ ...td, whiteSpace: 'pre-line' }}>{it.description || ''}</td>}
-                <td style={td}>{money(it.rate)}</td>
-                <td style={{ ...td, textAlign: 'center' }}>{it.quantity != null ? Number(it.quantity) || 1 : 1}</td>
-                <td style={{ ...td, textAlign: 'right' }}>{money(lineTotal(it))}</td>
+                <td style={{ ...td, textAlign: 'right' }}>{money(it.rate)}</td>
               </tr>
             ))}
           </tbody>
         </table>
-
-        {/* TOTAL */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
-          <div style={{ width: 240, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 6px 8px 8px', borderTop: `1px solid ${PURPLE}`, borderBottom: `1px solid ${PURPLE}` }}>
-            <span style={{ fontSize: 13 }}>Total ({currency})</span>
-            <strong style={{ fontSize: 14 }}>{money(total)}</strong>
-          </div>
-        </div>
 
         {/* SECTIONS */}
         <div style={{ marginTop: 12 }}>

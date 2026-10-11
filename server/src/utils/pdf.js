@@ -680,18 +680,14 @@ function quotationPdfDefinition(quotation = {}, settings = {}) {
     th('#', 'center'),
     th('product name', 'left'),
     ...(showDescription ? [th('Description', 'left')] : []),
-    th(`Unit Cost ${currency}`, 'left'),
-    th('Qty', 'center'),
-    th(`Total ${currency}`, 'right'),
+    th(`Unit Cost ${currency}`, 'right'),
   ];
-  const widths = showDescription ? [20, 130, '*', 65, 35, 75] : [20, '*', 75, 40, 85];
+  const widths = showDescription ? [24, 160, '*', 100] : [24, '*', 120];
   const itemRows = items.map((item, idx) => [
     { text: String(idx + 1), style: 'cell', alignment: 'center' },
     { text: formatCellText(item.productname || '').toUpperCase(), style: 'cell', alignment: 'left' },
     ...(showDescription ? [{ text: formatCellText(item.description || ''), style: 'cell', alignment: 'left' }] : []),
-    { text: money(item.rate), style: 'cell', alignment: 'left' },
-    { text: String(Number(item.quantity || 0)), style: 'cell', alignment: 'center' },
-    { text: money(lineTotal(item)), style: 'cell', alignment: 'right' },
+    { text: money(item.rate), style: 'cell', alignment: 'right' },
   ]);
   if (!itemRows.length) {
     itemRows.push([
@@ -832,33 +828,6 @@ function quotationPdfDefinition(quotation = {}, settings = {}) {
       {
         table: { headerRows: 1, dontBreakRows: true, widths, body: [headerCells, ...itemRows] },
         layout: purpleTable,
-      },
-
-      /* ======== TOTAL ======== */
-      {
-        columns: [
-          { width: '*', text: '' },
-          {
-            width: 220,
-            table: {
-              widths: ['*', 'auto'],
-              body: [[
-                { text: 'Total', style: 'totalLabel', border: [false, true, false, true] },
-                { text: money(total), style: 'totalValue', alignment: 'right', border: [false, true, false, true] },
-              ]],
-            },
-            layout: {
-              hLineWidth: () => 0.75,
-              vLineWidth: () => 0,
-              hLineColor: () => PURPLE,
-              paddingTop: () => 8,
-              paddingBottom: () => 8,
-              paddingLeft: () => 8,
-              paddingRight: () => 6,
-            },
-          },
-        ],
-        margin: [0, 4, 0, 0],
       },
 
       /* ======== QUOTATION SECTIONS ======== */

@@ -168,7 +168,7 @@ export default function QuotationView() {
             {fromLines.map((line, i) => <div key={i} style={{ whiteSpace: 'pre-line' }}>{line}</div>)}
           </div>
           <div>
-            <div>To: {quotation.companyname || ''}</div>
+            <div style={{ margin: '0 0 2px' }}>To: <strong style={{ fontWeight: 700, fontSize: 14 }}>{quotation.companyname || ''}</strong></div>
             <div style={{ fontWeight: 700, fontSize: 14, margin: '4px 0 2px' }}>Name: {quotation.person_incharge || ''}</div>
             <div style={{ whiteSpace: 'pre-line' }}>Address: {quotation.address || ''}</div>
             <div>Phone: {quotation.customer_contact || quotation.mobile_no || ''}</div>

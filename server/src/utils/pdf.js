@@ -809,7 +809,13 @@ function quotationPdfDefinition(quotation = {}, settings = {}) {
           {
             width: 220,
             stack: [
-              { text: `To: ${quotation.companyname || ''}`, style: 'partyLabel' },
+              {
+                text: [
+                  { text: 'To: ' },
+                  { text: quotation.companyname || '', bold: true },
+                ],
+                style: 'partyLabel',
+              },
               { text: `Name: ${quotation.person_incharge || ''}`, style: 'partyName', margin: [0, 4, 0, 2] },
               { text: `Address: ${quotation.address || ''}`, style: 'partyLine' },
               { text: `Phone: ${quotation.customer_contact || quotation.mobile_no || ''}`, style: 'partyLine' },

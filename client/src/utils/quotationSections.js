@@ -116,7 +116,8 @@ export function visibleItems(items) {
 /** Rate x quantity, rounded to cents. A missing quantity counts as 1. */
 export function lineTotal(item = {}) {
   const rate = Number(item.rate) || 0;
-  const quantity = item.quantity === undefined || item.quantity === null ? 1 : Number(item.quantity) || 0;
+  const qty = Number(item.quantity);
+  const quantity = item.quantity === undefined || item.quantity === null || item.quantity === '' || isNaN(qty) || qty <= 0 ? 1 : qty;
   return Math.round(rate * quantity * 100) / 100;
 }
 

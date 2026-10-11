@@ -120,7 +120,7 @@ export default function AddQuotation() {
                 productname: it.productname || '',
                 description: it.description || '',
                 rate: it.rate !== undefined && it.rate !== null ? String(it.rate) : '',
-                quantity: it.quantity ? String(Number(it.quantity)) : '1',
+                quantity: it.quantity != null ? String(Number(it.quantity) || 1) : '1',
                 hidden: it.hidden === true,
               }))
             );

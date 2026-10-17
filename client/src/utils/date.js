@@ -11,3 +11,14 @@ export function formatDateDMY(dateStr) {
 export function toDateInputValue(dateStr) {
   return String(dateStr).slice(0, 10);
 }
+
+/**
+ * Today's date in the user's own timezone as "YYYY-MM-DD" (what a date input expects).
+ * Never use toISOString() for this: it gives the UTC date, which is yesterday for a
+ * user in Singapore between midnight and 8 am.
+ */
+export function todayLocal() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}

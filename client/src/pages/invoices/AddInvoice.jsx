@@ -4,11 +4,13 @@ import { customersApi, invoicesApi, productsApi, settingsApi } from '../../api/e
 import { invalidatePdfCache } from '../../api/download';
 import { errorMessage, useToast } from '../../hooks/ToastContext';
 import { useAuth } from '../../hooks/AuthContext';
-import { toDateInputValue } from '../../utils/date';
+import { toDateInputValue, todayLocal } from '../../utils/date';
 import { PlusIcon, SpinnerIcon, TrashIcon } from '../../components/common/Icons';
 import SearchableSelect from '../../components/common/SearchableSelect';
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => todayLocal();
+// Auto-generated numbers look like YYYYMMDD-001; a number typed by hand is left alone.
+const AUTO_NUMBER = /^\d{8}-\d{3,}$/;
 const emptyItem = () => ({ product_id: '', description: '', rate: '', quantity: 1 });
 const defaultItems = () => Array.from({ length: 6 }, emptyItem);
 // GST-only accounts may bill nothing but the "GST" product: every line must be GST.
@@ -53,7 +55,7 @@ export default function AddInvoice() {
       customersApi.list({ limit: 1000 }),
       productsApi.list({ limit: 1000 }),
       settingsApi.get().catch(() => ({ data: {} })),
-      isEdit ? invoicesApi.get(id) : invoicesApi.nextNumber(),
+      isEdit ? invoicesApi.get(id) : invoicesApi.nextNumber(today()),
     ])
       .then(([cRes, pRes, sRes, last]) => {
         if (!alive) return;
@@ -114,6 +116,17 @@ export default function AddInvoice() {
   const newItem = () => (gstOnly && gstProduct ? { ...emptyItem(), product_id: String(gstProduct.id) } : emptyItem());
   const freshItems = () => (gstOnly ? [newItem()] : defaultItems());
 
+  // The number follows the invoice date (YYYYMMDD-001 per day). When the date of a
+  // new invoice changes and the number is still an auto-generated one, fetch the
+  // next free number for that date. A hand-typed number is never overwritten.
+  const handleDateChange = (value) => {
+    setInvoiceDate(value);
+    if (isEdit || !/^\d{4}-\d{2}-\d{2}$/.test(value) || (invoiceNo && !AUTO_NUMBER.test(invoiceNo.trim()))) return;
+    invoicesApi.nextNumber(value)
+      .then((res) => { if (res.data?.invoice_no) setInvoiceNo(res.data.invoice_no); })
+      .catch(() => { /* keep the current number; the server re-checks on save */ });
+  };
+
   const handleCustomerChange = (value) => {
     setCustomerId(value);
     const trimmedVal = String(value).trim().toLowerCase();
@@ -159,6 +172,7 @@ export default function AddInvoice() {
     setPaidAmount('');
     setInvoiceDate(today());
     setError('');
+    if (!isEdit) invoicesApi.nextNumber(today()).then((res) => { if (res.data?.invoice_no) setInvoiceNo(res.data.invoice_no); }).catch(() => {});
   };
 
   const handleSubmit = async (e) => {
@@ -312,7 +326,7 @@ export default function AddInvoice() {
             {/* 4. Invoice Date */}
             <div className="form-field">
               <label htmlFor="invdate">Invoice Date <span className="req">*</span></label>
-              <input id="invdate" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} required />
+              <input id="invdate" type="date" value={invoiceDate} onChange={(e) => handleDateChange(e.target.value)} required />
             </div>
           </div>
         </div>

@@ -6,6 +6,7 @@ const { sendMail, isMailConfigured } = require('../utils/mailer');
 const { buildInvoiceEmail, cleanSubject, cleanBody, MAX_SUBJECT_LENGTH, MAX_BODY_LENGTH } = require('../utils/invoiceEmail');
 const { gstOnly, ownerScope } = require('../utils/authz');
 const { isGstOnlyInvoice, classifyItems } = require('../utils/gst');
+const { localToday, datePrefix } = require('../utils/dates');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -63,21 +64,14 @@ async function cleanupExpiredTrash() {
 }
 
 /* ============================================================
- * Invoice numbers: YYYYMMDD-001, restarting at 001 every day
- * (day boundary in APP_TIMEZONE, default Asia/Singapore)
+ * Invoice numbers: YYYYMMDD-001, restarting at 001 for each invoice date.
+ * The prefix is the invoice's own date (the date picked in the form), so the
+ * number always matches the date printed on the invoice.
  * ============================================================ */
 
-function todayPrefix() {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: process.env.APP_TIMEZONE || 'Asia/Singapore',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(new Date()); // 'YYYY-MM-DD'
-  return parts.replace(/-/g, '');
-}
-
-/** Next free number for today: highest existing suffix for today's prefix + 1. */
-async function nextInvoiceNumber(runner = { query }) {
-  const prefix = todayPrefix();
+/** Next free number for `dateStr` (YYYY-MM-DD, default today in APP_TIMEZONE). */
+async function nextInvoiceNumber(dateStr, runner = { query }) {
+  const prefix = datePrefix(dateStr);
   const rows = await runner.query('SELECT invoice_no FROM invoices WHERE invoice_no LIKE ?', [`${prefix}-%`]);
   let max = 0;
   for (const row of rows) {
@@ -87,9 +81,9 @@ async function nextInvoiceNumber(runner = { query }) {
   return `${prefix}-${String(max + 1).padStart(3, '0')}`;
 }
 
-/** True when `invoiceNo` looks like one of today's auto-generated numbers. */
-function isTodayAutoNumber(invoiceNo) {
-  return new RegExp(`^${todayPrefix()}-\\d{3,}$`).test(String(invoiceNo || ''));
+/** True when `invoiceNo` looks like an auto-generated number for `dateStr`. */
+function isAutoNumberFor(invoiceNo, dateStr) {
+  return new RegExp(`^${datePrefix(dateStr)}-\\d{3,}$`).test(String(invoiceNo || ''));
 }
 
 /* ============================================================
@@ -203,8 +197,10 @@ const normaliseStatus = (status) => ((status && String(status).toLowerCase() ===
  * REST handlers
  * ============================================================ */
 
-async function nextNumber(_req, res) {
-  res.json({ invoice_no: await nextInvoiceNumber() });
+// GET /invoices/next-number?date=YYYY-MM-DD (date optional: today in APP_TIMEZONE)
+async function nextNumber(req, res) {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || '')) ? req.query.date : localToday();
+  res.json({ invoice_no: await nextInvoiceNumber(date), date });
 }
 
 const SORT_COLUMNS = {
@@ -437,10 +433,10 @@ async function create(req, res) {
       return res.status(201).json({ id: outcome.id, invoice_no: invoiceNo });
     } catch (error) {
       if (!isDuplicateError(error)) throw error;
-      if (!isTodayAutoNumber(invoiceNo) || attempt === 2) {
-        return res.status(409).json({ message: `Invoice number ${invoiceNo} already exists. The next free number is ${await nextInvoiceNumber()}.` });
+      if (!isAutoNumberFor(invoiceNo, invoice_date) || attempt === 2) {
+        return res.status(409).json({ message: `Invoice number ${invoiceNo} already exists. The next free number for ${invoice_date} is ${await nextInvoiceNumber(invoice_date)}.` });
       }
-      invoiceNo = await nextInvoiceNumber();
+      invoiceNo = await nextInvoiceNumber(invoice_date);
     }
   }
   return res.status(409).json({ message: 'Could not allocate an invoice number. Please try again.' });

@@ -29,7 +29,8 @@ export const productsApi = {
 export const invoicesApi = {
   list: (params) => api.get('/invoices', { params }),
   get: (id) => api.get(`/invoices/${id}`),
-  nextNumber: () => api.get('/invoices/next-number'),
+  // Next free number for the given invoice date (YYYY-MM-DD); today when omitted.
+  nextNumber: (date) => api.get('/invoices/next-number', { params: date ? { date } : {} }),
   create: (data) => api.post('/invoices', data),
   update: (id, data) => api.put(`/invoices/${id}`, data),
   patchStatus: (id, status) => api.patch(`/invoices/${id}/status`, { status }),

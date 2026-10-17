@@ -21,7 +21,7 @@ function describeFilters(filters = {}) {
 
 function reportHeader(rows = [], { filters = {}, settings = {} } = {}) {
   const active = describeFilters(filters);
-  const generatedOn = new Date().toISOString().slice(0, 10);
+  const generatedOn = require('./dates').localToday();
   return {
     company: String(settings.company_name || '').trim() || FALLBACK_COMPANY,
     title: 'Invoice Report',

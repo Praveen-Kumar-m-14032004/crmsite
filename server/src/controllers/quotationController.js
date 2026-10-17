@@ -2,6 +2,7 @@ const { query, queryOne, execute, now, numericId, likeTerm, parseJson, toJson, i
 const { buildPdf, quotationPdfDefinition } = require('../utils/pdf');
 const { cached } = require('../utils/cache');
 const { VISIBILITY_KEYS, visibleTotal } = require('../utils/quotationSections');
+const { localToday } = require('../utils/dates');
 
 /* ---- LRU PDF buffer cache (same pattern as invoices) ---- */
 const pdfCache = new Map();
@@ -167,7 +168,7 @@ function recordFields(body) {
     person_incharge: person_incharge ? String(person_incharge).trim() : '',
     mobile_no: mobile_no || customer_contact || '',
     customer_contact: customer_contact || mobile_no || '',
-    quotation_date: (quotation_date && String(quotation_date).slice(0, 10)) || new Date().toISOString().slice(0, 10),
+    quotation_date: (quotation_date && String(quotation_date).slice(0, 10)) || localToday(),
     items: cleaned,
     // Hidden items are not quoted, so they do not count.
     sub_amount: visibleTotal(cleaned),

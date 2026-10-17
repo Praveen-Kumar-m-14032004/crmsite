@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { customersApi, productsApi, quotationsApi, settingsApi } from '../../api/endpoints';
 import { errorMessage, useToast } from '../../hooks/ToastContext';
-import { toDateInputValue } from '../../utils/date';
+import { toDateInputValue, todayLocal } from '../../utils/date';
 import { EyeIcon, EyeOffIcon, PlusIcon, SpinnerIcon, TrashIcon } from '../../components/common/Icons';
 import SearchableSelect from '../../components/common/SearchableSelect';
 import {
@@ -15,7 +15,7 @@ import {
   visibleTotal,
 } from '../../utils/quotationSections';
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => todayLocal();
 const emptyItem = () => ({ product_id: '', productname: '', description: '', rate: '', quantity: 1, hidden: false });
 const defaultItems = () => Array.from({ length: 4 }, emptyItem);
 const emptyTurn = () => ({ priority: '', timing: '' });

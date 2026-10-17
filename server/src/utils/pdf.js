@@ -444,7 +444,7 @@ function invoicePdfDefinition(invoice, items = [], settings = {}) {
         table: {
           headerRows: 1,
           dontBreakRows: true,
-          widths: [20, 130, '*', 65, 35, 75],
+          widths: [20, 112, '*', 58, 28, 60],
           body: [
             [
               { text: '#', style: 'th', color: '#ffffff', bold: true, alignment: 'center' },

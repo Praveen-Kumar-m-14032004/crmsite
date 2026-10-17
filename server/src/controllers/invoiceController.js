@@ -213,10 +213,10 @@ const SORT_COLUMNS = {
 };
 
 async function list(req, res) {
-  const { search = '', page = 1, limit = 10, sort = 'invoice_date', dir = 'desc', company, customer_id, trash } = req.query;
+  const { search = '', page = 1, limit = 10, sort = 'created_at', dir = 'desc', company, customer_id, trash } = req.query;
   const isTrash = trash === 'true' || trash === true;
 
-  const sortCol = SORT_COLUMNS[sort] || (isTrash ? 'i.deleted_at' : 'i.invoice_date');
+  const sortCol = SORT_COLUMNS[sort] || (isTrash ? 'i.deleted_at' : 'i.created_at');
   const sortDir = String(dir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
   const pageNum = Math.max(parseInt(page, 10) || 1, 1);
   const limitNum = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 1000);
@@ -410,6 +410,12 @@ async function create(req, res) {
   if (gstOnly(req, 'create') && !gst.gstOnly) return res.status(400).json({ message: GST_REQUIRED_MESSAGE });
 
   let invoiceNo = String(invoice_no).trim();
+  // A generated number always belongs to the invoice date's sequence. If the
+  // form still carries a number issued for another day (date changed, stale
+  // page), take the next free number for the chosen date instead.
+  if (/^\d{8}-\d{3,}$/.test(invoiceNo) && !isAutoNumberFor(invoiceNo, invoice_date)) {
+    invoiceNo = await nextInvoiceNumber(invoice_date);
+  }
   // Two users can be handed the same daily number at the same moment; when the
   // submitted number is one of today's generated ones, move to the next free one.
   for (let attempt = 0; attempt < 3; attempt += 1) {

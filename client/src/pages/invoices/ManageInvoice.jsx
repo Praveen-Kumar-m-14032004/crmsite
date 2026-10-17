@@ -65,7 +65,7 @@ export default function ManageInvoice() {
       });
   }, []);
 
-  const table = useDataTable(fetcher, { defaultSort: 'invoice_date', defaultDir: 'desc' });
+  const table = useDataTable(fetcher, { defaultSort: 'created_at', defaultDir: 'desc' });
 
   const isFirstMount = useRef(true);
   useEffect(() => {

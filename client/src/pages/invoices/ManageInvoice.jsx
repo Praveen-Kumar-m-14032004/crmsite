@@ -277,6 +277,16 @@ export default function ManageInvoice() {
         )}
       </div>
 
+      {!can('invoices.view_all') && !isTrashRoute && (
+        <div className="trash-banner">
+          <AlertIcon width={17} height={17} style={{ color: 'var(--purple-600)', flexShrink: 0 }} />
+          <div>
+            <strong>Your invoices only.</strong>
+            {' '}This list shows invoices you created. Invoices created by other users are not visible to you.
+          </div>
+        </div>
+      )}
+
       {gstOnly && !isTrashRoute && (
         <div className="trash-banner">
           <AlertIcon width={17} height={17} style={{ color: 'var(--purple-600)', flexShrink: 0 }} />

@@ -9,6 +9,8 @@ const permissionRows = [
   ['customers.view', 'customers', 'view'], ['customers.create', 'customers', 'create'], ['customers.edit', 'customers', 'edit'], ['customers.delete', 'customers', 'delete'],
   ['products.view', 'products', 'view'], ['products.create', 'products', 'create'], ['products.edit', 'products', 'edit'], ['products.delete', 'products', 'delete'],
   ['invoices.view', 'invoices', 'view'], ['invoices.create', 'invoices', 'create'], ['invoices.edit', 'invoices', 'edit'], ['invoices.delete', 'invoices', 'delete'], ['invoices.print', 'invoices', 'print'],
+  // Without view_all a role sees and touches only the invoices its own users created.
+  ['invoices.view_all', 'invoices', 'view_all'],
   // GST-only scope: same actions, but confined to invoices made up of GST lines only.
   ['gst_invoices.view', 'gst_invoices', 'view'], ['gst_invoices.create', 'gst_invoices', 'create'], ['gst_invoices.edit', 'gst_invoices', 'edit'], ['gst_invoices.delete', 'gst_invoices', 'delete'], ['gst_invoices.print', 'gst_invoices', 'print'],
   ['reports.view', 'reports', 'view'], ['reports.export', 'reports', 'export'], ['users.manage', 'users', 'manage'], ['roles.manage', 'roles', 'manage'], ['settings.manage', 'settings', 'manage'], ['dashboard.view', 'dashboard', 'view'],
@@ -21,7 +23,7 @@ const roleRows = [
   [2, 'Accountant', 'Runs day-to-day invoicing and payments', 1],
   [3, 'Sales', 'Onboards customers, read-only on invoices', 1],
   [4, 'Viewer', 'Read-only oversight across all modules', 1],
-  [5, 'Supervisor', 'GST invoices only: create, edit, delete and print GST bills, plus the dashboard', 1],
+  [5, 'Supervisor', 'Creates and manages their own invoices, plus the dashboard', 1],
 ];
 
 const roleCodes = {
@@ -29,8 +31,36 @@ const roleCodes = {
   2: ['customers.view', 'customers.create', 'customers.edit', 'products.view', 'invoices.view', 'invoices.create', 'invoices.edit', 'invoices.delete', 'invoices.print', 'quotations.view', 'quotations.create', 'quotations.edit', 'quotations.delete', 'quotations.print', 'reports.view', 'reports.export', 'dashboard.view'],
   3: ['customers.view', 'customers.create', 'customers.edit', 'products.view', 'invoices.view', 'quotations.view', 'quotations.create', 'dashboard.view'],
   4: ['customers.view', 'products.view', 'invoices.view', 'quotations.view', 'reports.view', 'reports.export', 'dashboard.view'],
-  5: ['gst_invoices.view', 'gst_invoices.create', 'gst_invoices.edit', 'gst_invoices.delete', 'gst_invoices.print', 'dashboard.view'],
+  5: ['invoices.view', 'invoices.create', 'invoices.edit', 'invoices.delete', 'invoices.print', 'dashboard.view'],
 };
+
+/**
+ * One-time data changes, recorded in app_migrations so they never run twice and
+ * never undo what an admin changed afterwards in the Roles & Permissions matrix.
+ */
+async function runMigrations(permissionIds) {
+  const applied = new Set((await query('SELECT name FROM app_migrations')).map((row) => row.name));
+  const steps = {
+    // Invoices written before ownership existed belong to the first Admin.
+    '2026-10-18-invoices-created-by-backfill': async () => {
+      const admin = await queryOne('SELECT id FROM users WHERE role_id = ? ORDER BY id LIMIT 1', [ADMIN_ROLE_ID]);
+      if (admin) await execute('UPDATE invoices SET created_by = ? WHERE created_by IS NULL', [admin.id]);
+    },
+    // Supervisor moves from "GST invoices only" to "all invoice actions on own invoices".
+    '2026-10-18-supervisor-own-invoices': async () => {
+      const role = await queryOne('SELECT id FROM roles WHERE id = 5 AND is_system = 1 AND name = ?', ['Supervisor']);
+      if (!role) return;
+      await execute('DELETE FROM role_permissions WHERE role_id = 5');
+      await grantAll(5, roleCodes[5], permissionIds);
+    },
+  };
+  for (const [name, run] of Object.entries(steps)) {
+    if (applied.has(name)) continue;
+    await run();
+    await execute('INSERT INTO app_migrations (name, applied_at) VALUES (?, ?)', [name, now()]);
+    console.log(`[migrate] applied ${name}`);
+  }
+}
 
 const products = [
   'GST', 'IMPORT DECLARATION', 'EXPORT DECLARATION', 'CANCELLATION',
@@ -132,6 +162,8 @@ async function seedDefaults(overrideUsername, overridePassword) {
 
   // Invoices saved before the GST-only flag existed get it now.
   await backfillGstOnly();
+
+  await runMigrations(permissionIds);
 }
 
 module.exports = { seedDefaults, permissionRows, roleRows, roleCodes };

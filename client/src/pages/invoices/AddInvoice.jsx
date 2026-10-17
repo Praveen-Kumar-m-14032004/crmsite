@@ -15,6 +15,8 @@ const defaultItems = () => Array.from({ length: 6 }, emptyItem);
 const isGstProduct = (p) => String(p?.productname || '').trim().toUpperCase() === 'GST';
 const GST_REQUIRED = 'Your role can only bill the GST product. Every line item must be "GST".';
 const MISSING_GST_PRODUCT = 'The "GST" product does not exist yet. Ask an admin to add it under Products.';
+// Shown at the top of the product list, in this order (matched by name prefix).
+const PINNED_PRODUCTS = ['GST', 'IMPORT DECLARATION', 'PERMIT CHARGES', 'IMPORTER OF THE RECORD', 'IMPORTER OF RECORD'];
 
 export default function AddInvoice() {
   const { id } = useParams();
@@ -132,13 +134,17 @@ export default function AddInvoice() {
     [customers]
   );
 
-  const productOptions = useMemo(
-    () => (products || []).map((p) => ({
-      value: String(p.id),
-      label: p.productname,
-    })),
-    [products]
-  );
+  // The products billed most often come first, in this order; the rest follow A-Z.
+  const productOptions = useMemo(() => {
+    const rank = (name) => {
+      const n = String(name || '').trim().toUpperCase();
+      const index = PINNED_PRODUCTS.findIndex((pin) => n === pin || n.startsWith(`${pin} `) || n.startsWith(`${pin} (`));
+      return index === -1 ? PINNED_PRODUCTS.length : index;
+    };
+    return [...(products || [])]
+      .sort((a, b) => rank(a.productname) - rank(b.productname) || String(a.productname).localeCompare(String(b.productname)))
+      .map((p) => ({ value: String(p.id), label: p.productname }));
+  }, [products]);
 
   const updateItem = (idx, field, value) =>
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [field]: value } : it)));
@@ -235,7 +241,8 @@ export default function AddInvoice() {
       } else {
         const createRes = await invoicesApi.create(payload);
         invalidatePdfCache();
-        toast.success(`Invoice #${payload.invoice_no} created`);
+        // The server may move to the next daily number if two people saved at once.
+        toast.success(`Invoice #${createRes.data?.invoice_no || payload.invoice_no} created`);
       }
       navigate('/invoices');
     } catch (err) {

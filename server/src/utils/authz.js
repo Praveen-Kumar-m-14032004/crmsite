@@ -81,6 +81,15 @@ function gstOnly(req, action) {
   return !hasPerm(req, `invoices.${action}`) && hasPerm(req, `gst_invoices.${action}`);
 }
 
+/**
+ * Ownership scoping. Invoices are private to the user who created them unless the
+ * role holds `invoices.view_all` (Admin by default). Returns the user id to
+ * restrict to, or null when the caller may see everyone's invoices.
+ */
+function ownerScope(req) {
+  return hasPerm(req, 'invoices.view_all') ? null : Number(req.user?.id) || -1;
+}
+
 module.exports = {
   ADMIN_ROLE_ID,
   getPermissionsForRole,
@@ -89,4 +98,5 @@ module.exports = {
   invalidateUserAccess,
   hasPerm,
   gstOnly,
+  ownerScope,
 };

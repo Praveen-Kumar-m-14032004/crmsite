@@ -84,7 +84,14 @@ terminal for `[api] Permit Declaration API listening on http://localhost:5001`.
 | **Accountant** | Full invoices, view/create customers, view products, reports + export |
 | **Sales** | Full customers, view products, read-only invoices |
 | **Viewer** | Read-only everywhere, plus report export |
-| **Supervisor** | GST invoices only (view, create, edit, delete, print) plus the dashboard |
+| **Supervisor** | Creates, edits, deletes and prints invoices, but sees only the invoices they created, plus the dashboard |
+
+Invoices are private to the user who created them. A role sees other users' invoices only
+when **Invoices → all users' invoices** (`invoices.view_all`) is ticked in the matrix; Admin
+has it by default, nobody else does. Dashboard figures and reports follow the same rule.
+Invoice numbers are `YYYYMMDD-001`, `-002`, … and restart at 001 each day (Singapore time,
+`APP_TIMEZONE`). The matrix also has a **GST invoices only** row for roles that may bill
+nothing but the GST product.
 
 ### Login accounts
 
@@ -107,11 +114,10 @@ edit the permission matrix under **User Management → Roles & Permissions**.
 
 The matrix has two invoice rows. **Invoices (all)** covers every invoice; **GST invoices
 only** covers just the invoices whose every line is the `GST` product (stored as
-`is_gst_only`). A role that holds only the GST permissions (like Supervisor) is confined to
-those invoices everywhere: list, trash, counts, view, print, email, edit, delete, restore and
-the dashboard figures. Its invoice form offers only the GST product, and saving any other
-line item is rejected by the API. An invoice that mixes GST with another product belongs to
-the full invoice roles. Roles are re-read on every request, so a change
+`is_gst_only`). A role that holds only the GST permissions is confined to those invoices
+everywhere: list, trash, counts, view, print, email, edit, delete, restore and the dashboard
+figures. Its invoice form offers only the GST product, and saving any other line item is
+rejected by the API. Roles are re-read on every request, so a change
 saved in the matrix applies to signed-in users within about 30 seconds. Admin always holds
 every permission and cannot be restricted; built-in roles cannot be deleted; a custom role
 cannot be deleted while users are assigned to it.

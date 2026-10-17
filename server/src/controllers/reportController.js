@@ -1,4 +1,5 @@
 const { query, queryOne, likeTerm } = require('../utils/db');
+const { ownerScope } = require('../utils/authz');
 const { buildPdf, reportPdfDefinition } = require('../utils/pdf');
 const { buildReportExcel } = require('../utils/excel');
 const { buildReportCsv } = require('../utils/csv');
@@ -6,10 +7,13 @@ const { buildReportCsv } = require('../utils/csv');
 const PREVIEW_LIMIT = 500;
 const EXPORT_LIMIT = 10000;
 
-function buildWhere(filters) {
+function buildWhere(filters, ownerId) {
   const { company, start, end, paymentStatus, status, invoiceNo } = filters;
   const conditions = ['i.is_deleted = 0'];
   const params = [];
+
+  // Roles without invoices.view_all report only on the invoices they created.
+  if (ownerId) { conditions.push('i.created_by = ?'); params.push(ownerId); }
 
   if (start) { conditions.push('i.invoice_date >= ?'); params.push(String(start).slice(0, 10)); }
   if (end) { conditions.push('i.invoice_date <= ?'); params.push(String(end).slice(0, 10)); }
@@ -28,8 +32,8 @@ function buildWhere(filters) {
   return { where: conditions.join(' AND '), params };
 }
 
-async function runQuery(filters, limit) {
-  const { where, params } = buildWhere(filters);
+async function runQuery(filters, limit, ownerId) {
+  const { where, params } = buildWhere(filters, ownerId);
   const from = 'FROM invoices i LEFT JOIN customers c ON c.id = i.customer_id';
 
   const [totals, rows] = await Promise.all([
@@ -71,7 +75,7 @@ async function generate(req, res) {
     invoiceNo: req.query.invoiceNo,
   };
   const format = req.query.format;
-  const { rows, summary, count, truncated } = await runQuery(filters, format ? EXPORT_LIMIT : PREVIEW_LIMIT);
+  const { rows, summary, count, truncated } = await runQuery(filters, format ? EXPORT_LIMIT : PREVIEW_LIMIT, ownerScope(req));
 
   if (!format) return res.json({ data: rows, summary, count, truncated, shown: rows.length });
 

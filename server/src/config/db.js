@@ -127,9 +127,11 @@ const SCHEMA = [
      is_deleted TINYINT(1) NOT NULL DEFAULT 0,
      deleted_at DATETIME(3) NULL,
      version INT UNSIGNED NOT NULL DEFAULT 0,
+     created_by INT UNSIGNED NULL,
      created_at DATETIME(3) NULL,
      updated_at DATETIME(3) NULL,
      UNIQUE KEY uq_invoices_no (invoice_no),
+     KEY idx_invoices_owner (created_by),
      KEY idx_invoices_customer (customer_id),
      KEY idx_invoices_list (is_deleted, invoice_date, id),
      KEY idx_invoices_status (is_deleted, status),
@@ -176,6 +178,10 @@ const SCHEMA = [
      KEY idx_quotations_customer (customer_id),
      KEY idx_quotations_date (quotation_date)
    ) ${TABLE_OPTIONS}`,
+  `CREATE TABLE IF NOT EXISTS app_migrations (
+     name VARCHAR(120) NOT NULL PRIMARY KEY,
+     applied_at DATETIME(3) NULL
+   ) ${TABLE_OPTIONS}`,
   `CREATE TABLE IF NOT EXISTS company_settings (
      id INT UNSIGNED NOT NULL PRIMARY KEY,
      company_name VARCHAR(255) NOT NULL,
@@ -191,6 +197,21 @@ const SCHEMA = [
      updated_at DATETIME(3) NULL
    ) ${TABLE_OPTIONS}`,
 ];
+
+// Columns added after the first release; applied to databases created before them.
+const COLUMN_ADDITIONS = [
+  { table: 'invoices', column: 'created_by', ddl: 'ADD COLUMN created_by INT UNSIGNED NULL, ADD KEY idx_invoices_owner (created_by)' },
+];
+
+async function ensureColumns(p) {
+  for (const add of COLUMN_ADDITIONS) {
+    const [rows] = await p.query(
+      'SELECT COUNT(*) AS n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
+      [add.table, add.column]
+    );
+    if (!Number(rows[0]?.n)) await p.query(`ALTER TABLE ${add.table} ${add.ddl}`);
+  }
+}
 
 function assertSafeName(name) {
   if (!/^[A-Za-z0-9_]+$/.test(name)) {
@@ -239,6 +260,7 @@ async function connect() {
   for (const statement of SCHEMA) {
     await pool.query(statement);
   }
+  await ensureColumns(pool);
   return pool;
 }
 

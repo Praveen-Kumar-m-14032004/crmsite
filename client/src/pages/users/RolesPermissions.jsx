@@ -6,7 +6,8 @@ import ConfirmDialog from '../../components/common/ConfirmDialog';
 import { AlertIcon, PlusIcon, SpinnerIcon, TrashIcon } from '../../components/common/Icons';
 
 const ADMIN_ROLE_ID = 1;
-const ACTION_ORDER = ['view', 'create', 'edit', 'delete', 'print', 'export', 'manage'];
+const ACTION_ORDER = ['view', 'view_all', 'create', 'edit', 'delete', 'print', 'export', 'manage'];
+const ACTION_LABELS = { view_all: "all users' invoices" };
 
 // Display order, label and a one-line hint for each permission module. Modules
 // the API adds later still render, after these, under their raw name.
@@ -14,7 +15,7 @@ const MODULE_META = {
   dashboard: { label: 'Dashboard', hint: 'Summary cards on the home screen' },
   customers: { label: 'Customers', hint: 'Customer master data' },
   products: { label: 'Products', hint: 'Product / service master data' },
-  invoices: { label: 'Invoices (all)', hint: 'Every invoice, GST or not' },
+  invoices: { label: 'Invoices (all)', hint: 'Every invoice, GST or not. Each user sees only the invoices they created unless "all users\' invoices" is ticked.' },
   gst_invoices: { label: 'GST invoices only', hint: 'Only invoices whose every line is the GST product; no other product can be seen or billed. Use this instead of "Invoices (all)" for GST-only roles such as Supervisor.' },
   quotations: { label: 'Quotations', hint: 'Estimates sent before invoicing' },
   reports: { label: 'Reports', hint: 'Search and export' },
@@ -193,7 +194,7 @@ export default function RolesPermissions() {
         <thead>
           <tr>
             <th style={{ minWidth: 190 }}>Module</th>
-            {actionColumns.map((a) => <th key={a}>{a}</th>)}
+            {actionColumns.map((a) => <th key={a}>{ACTION_LABELS[a] || a}</th>)}
             <th style={{ width: 70 }}>All</th>
           </tr>
         </thead>

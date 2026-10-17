@@ -18,7 +18,13 @@ into chat, commits or this file.
 > | API (Render service name must be `permit-declaration-api`) | https://permit-declaration-api.onrender.com |
 > | `VITE_API_URL` baked into the current frontend build | `https://permit-declaration-api.onrender.com/api` |
 > | `CLIENT_ORIGIN` to set on Render | `https://permit-declaration-crm.pages.dev,https://*.permit-declaration-crm.pages.dev` |
-> | Database | Aiven for **MySQL** free plan, database `defaultdb` |
+> | Database | Aiven for **MySQL** free plan, service `crm-mysql` (Singapore, `do-sgp`), database `defaultdb`, app user `crm_app` (an Aiven service user) |
+> | Status | API live on Render and verified from the Pages origin on 17 Oct 2026 (health, admin login, CORS allowlist, dashboard, lists) |
+>
+> Note on Aiven API tokens: they return `<redacted>` for every password, so the
+> `avnadmin` password cannot be read by scripts. The app therefore uses the
+> `crm_app` service user whose password was set through the API. To narrow its
+> rights, run the F.4 `GRANT` statements as `avnadmin` from the Aiven console.
 >
 > The frontend was published from this PC with `wrangler pages deploy client/dist`
 > (login with `npx wrangler login`). To publish again after a change:

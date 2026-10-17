@@ -47,11 +47,16 @@ async function runMigrations(permissionIds) {
       if (admin) await execute('UPDATE invoices SET created_by = ? WHERE created_by IS NULL', [admin.id]);
     },
     // Supervisor moves from "GST invoices only" to "all invoice actions on own invoices".
+    // Only the GST-only grants are swapped for the full invoice grants; anything else
+    // an admin added to the role in the matrix (customers, reports, ...) is kept.
     '2026-10-18-supervisor-own-invoices': async () => {
       const role = await queryOne('SELECT id FROM roles WHERE id = 5 AND is_system = 1 AND name = ?', ['Supervisor']);
       if (!role) return;
-      await execute('DELETE FROM role_permissions WHERE role_id = 5');
-      await grantAll(5, roleCodes[5], permissionIds);
+      await execute(
+        'DELETE rp FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id WHERE rp.role_id = 5 AND p.module = ?',
+        ['gst_invoices']
+      );
+      await grantAll(5, ['invoices.view', 'invoices.create', 'invoices.edit', 'invoices.delete', 'invoices.print', 'dashboard.view'], permissionIds);
     },
   };
   for (const [name, run] of Object.entries(steps)) {

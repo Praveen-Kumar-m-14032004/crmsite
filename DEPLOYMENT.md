@@ -26,6 +26,12 @@ into chat, commits or this file.
 > `crm_app` service user whose password was set through the API. To narrow its
 > rights, run the F.4 `GRANT` statements as `avnadmin` from the Aiven console.
 >
+> **Pushing to GitHub does not redeploy the API yet.** The Render service was first
+> connected through another GitHub account, so Render receives no push events for
+> `crmsite`. After each push either click **Manual Deploy → Deploy latest commit** in
+> the Render dashboard, or connect your GitHub account under Render → Account
+> Settings → Git Providers and re-link the repository so auto-deploy works.
+>
 > The frontend was published from this PC with `wrangler pages deploy client/dist`
 > (login with `npx wrangler login`). To publish again after a change:
 > `cd client && VITE_API_URL=https://permit-declaration-api.onrender.com/api npm run build && npx wrangler pages deploy dist --project-name permit-declaration-crm --branch main`

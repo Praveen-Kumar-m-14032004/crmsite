@@ -1,9 +1,8 @@
-const { collection } = require('./mongo');
+const { query, queryOne } = require('./db');
 const { cached, invalidate } = require('./cache');
 
 // How long a resolved account (role + permissions) may be reused before it is
-// re-read from MongoDB. Role edits and user edits invalidate it immediately, so
-// this only matters if the API ever runs as several processes.
+// re-read from the database. Role edits and user edits invalidate it immediately.
 const ACCESS_TTL_MS = 30_000;
 
 const ADMIN_ROLE_ID = 1;
@@ -11,12 +10,15 @@ const ADMIN_ROLE_ID = 1;
 async function getPermissionsForRole(roleId) {
   const id = Number(roleId);
   if (!id) return [];
-  const links = await collection('role_permissions').find({ role_id: id }).toArray();
-  if (!links.length) return [];
-  const permissions = await collection('permissions')
-    .find({ id: { $in: links.map((link) => link.permission_id) } })
-    .toArray();
-  return permissions.map((permission) => permission.code);
+  const rows = await query(
+    `SELECT p.code
+       FROM role_permissions rp
+       JOIN permissions p ON p.id = rp.permission_id
+      WHERE rp.role_id = ?
+      ORDER BY p.code`,
+    [id]
+  );
+  return rows.map((row) => row.code);
 }
 
 function rolePermissionsCached(roleId) {
@@ -33,17 +35,22 @@ async function resolveAccess(userId) {
   const id = Number(userId);
   if (!id) return null;
   return cached(`access:user:${id}:`, ACCESS_TTL_MS, async () => {
-    const user = await collection('users').findOne({ id }, { projection: { password: 0 } });
+    const user = await queryOne(
+      `SELECT u.id, u.name, u.username, u.email, u.role_id, u.is_active, r.name AS role_name
+         FROM users u
+         LEFT JOIN roles r ON r.id = u.role_id
+        WHERE u.id = ?`,
+      [id]
+    );
     if (!user) return null;
-    const role = await collection('roles').findOne({ id: user.role_id });
-    const permissions = role ? await rolePermissionsCached(role.id) : [];
+    const permissions = user.role_id ? await rolePermissionsCached(user.role_id) : [];
     return {
       id: user.id,
       name: user.name || null,
       username: user.username,
       email: user.email || null,
       roleId: user.role_id,
-      roleName: role?.name || null,
+      roleName: user.role_name || null,
       permissions,
       isActive: Boolean(user.is_active),
     };
@@ -66,9 +73,9 @@ function hasPerm(req, code) {
 
 /**
  * GST scoping. A role can hold `invoices.<action>` (all invoices) or only
- * `gst_invoices.<action>` (invoices that carry the GST line item). When a caller
+ * `gst_invoices.<action>` (invoices made up of GST lines only). When a caller
  * has the GST-only permission and not the full one, every invoice handler must
- * confine itself to GST bills.
+ * confine itself to GST-only invoices.
  */
 function gstOnly(req, action) {
   return !hasPerm(req, `invoices.${action}`) && hasPerm(req, `gst_invoices.${action}`);

@@ -1,4 +1,4 @@
-const { collection, nextId, now, numericId } = require('../utils/mongo');
+const { query, queryOne, execute, now, numericId, likeTerm, parseJson, toJson, isDuplicateError } = require('../utils/db');
 const { buildPdf, quotationPdfDefinition } = require('../utils/pdf');
 const { cached } = require('../utils/cache');
 const { VISIBILITY_KEYS, visibleTotal } = require('../utils/quotationSections');
@@ -27,14 +27,23 @@ function lruSet(key, val) {
 
 function getSettings() {
   return cached('quotation:companySettings', SETTINGS_TTL, async () =>
-    (await collection('company_settings').findOne({})) || {}
+    (await queryOne('SELECT * FROM company_settings ORDER BY id LIMIT 1')) || {}
   );
 }
 
 const SORTABLE = ['quotation_no', 'companyname', 'mobile_no', 'quotation_date', 'sub_amount', 'created_at', 'id'];
+const JSON_FIELDS = ['items', 'turnaround', 'terms', 'visibility'];
 
-function escapeRegex(str) {
-  return String(str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** Database row -> API shape (JSON columns parsed). */
+function hydrate(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    items: parseJson(row.items, []),
+    turnaround: parseJson(row.turnaround, null),
+    terms: parseJson(row.terms, null),
+    visibility: parseJson(row.visibility, null),
+  };
 }
 
 /**
@@ -60,9 +69,8 @@ function cleanItems(items) {
 }
 
 /**
- * Normalize the editable document-content fields from a request body.
- * Only defined fields are returned, so update() won't clobber stored content
- * with blanks when the client omits a section.
+ * Editable document-content fields from a request body. Only defined fields are
+ * returned, so update() won't clobber stored content when the client omits one.
  */
 function pickSections(body) {
   const out = {};
@@ -89,13 +97,14 @@ function pickSections(body) {
   return out;
 }
 
-function findFilter(param) {
-  if (!param) return { id: -1 };
+/** Look a quotation up by numeric id or by its number. */
+async function findQuotation(param) {
+  if (!param) return null;
   const num = numericId(param);
-  if (num) {
-    return { $or: [{ id: num }, { quotation_no: String(param) }] };
-  }
-  return { quotation_no: String(param) };
+  const row = num
+    ? await queryOne('SELECT * FROM quotations WHERE id = ? OR quotation_no = ? LIMIT 1', [num, String(param)])
+    : await queryOne('SELECT * FROM quotations WHERE quotation_no = ? LIMIT 1', [String(param)]);
+  return hydrate(row);
 }
 
 /** Next number in the Q-MMYY-#### sequence for the current month. */
@@ -105,15 +114,10 @@ async function generateNumber() {
   const yy = String(d.getFullYear()).slice(-2);
   const prefix = `Q-${mm}${yy}-`;
 
-  const last = await collection('quotations')
-    .find({ quotation_no: { $regex: `^${escapeRegex(prefix)}` } })
-    .sort({ quotation_no: -1 })
-    .limit(1)
-    .toArray();
-
+  const last = await queryOne('SELECT quotation_no FROM quotations WHERE quotation_no LIKE ? ORDER BY quotation_no DESC LIMIT 1', [`${prefix}%`]);
   let nextSeq = 1;
-  if (last.length > 0 && last[0].quotation_no) {
-    const parts = last[0].quotation_no.split('-');
+  if (last?.quotation_no) {
+    const parts = last.quotation_no.split('-');
     const seq = parseInt(parts[parts.length - 1], 10);
     if (!isNaN(seq)) nextSeq = seq + 1;
   }
@@ -124,35 +128,27 @@ async function list(req, res) {
   const { search = '', page = 1, limit = 10, sort = 'id', dir = 'desc' } = req.query;
 
   const sortCol = SORTABLE.includes(sort) ? sort : 'id';
-  const sortDir = String(dir).toLowerCase() === 'asc' ? 1 : -1;
+  const sortDir = String(dir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
   const pageNum = Math.max(parseInt(page, 10) || 1, 1);
   const limitNum = Math.max(parseInt(limit, 10) || 10, 1);
   const offset = (pageNum - 1) * limitNum;
 
   const term = String(search || '').trim();
-  const filter = term
-    ? {
-        $or: ['quotation_no', 'companyname', 'person_incharge', 'mobile_no', 'customer_contact'].map((field) => ({
-          [field]: { $regex: escapeRegex(term), $options: 'i' },
-        })),
-      }
-    : {};
+  const where = term
+    ? 'WHERE (quotation_no LIKE ? OR companyname LIKE ? OR person_incharge LIKE ? OR mobile_no LIKE ? OR customer_contact LIKE ?)'
+    : '';
+  const params = term ? Array(5).fill(likeTerm(term)) : [];
 
-  const [rows, total] = await Promise.all([
-    collection('quotations')
-      .find(filter)
-      .sort({ [sortCol]: sortDir, id: sortDir })
-      .skip(offset)
-      .limit(limitNum)
-      .toArray(),
-    collection('quotations').countDocuments(filter),
+  const [rows, count] = await Promise.all([
+    query(`SELECT * FROM quotations ${where} ORDER BY ${sortCol} ${sortDir}, id ${sortDir} LIMIT ? OFFSET ?`, [...params, limitNum, offset]),
+    queryOne(`SELECT COUNT(*) AS n FROM quotations ${where}`, params),
   ]);
 
-  res.json({ data: rows, total, page: pageNum, limit: limitNum });
+  res.json({ data: rows.map(hydrate), total: Number(count?.n || 0), page: pageNum, limit: limitNum });
 }
 
 async function getOne(req, res) {
-  const quotation = await collection('quotations').findOne(findFilter(req.params.id));
+  const quotation = await findQuotation(req.params.id);
   if (!quotation) return res.status(404).json({ message: 'Quotation not found' });
   res.json(quotation);
 }
@@ -161,7 +157,7 @@ async function nextNumber(_req, res) {
   res.json({ quotation_no: await generateNumber() });
 }
 
-/** Fields shared by create and update, taken from the request body. */
+/** Columns shared by create and update, taken from the request body. */
 function recordFields(body) {
   const { companyname, address, person_incharge, mobile_no, customer_contact, quotation_date, items, notes } = body;
   const cleaned = cleanItems(items);
@@ -171,13 +167,22 @@ function recordFields(body) {
     person_incharge: person_incharge ? String(person_incharge).trim() : '',
     mobile_no: mobile_no || customer_contact || '',
     customer_contact: customer_contact || mobile_no || '',
-    quotation_date: quotation_date || new Date().toISOString().slice(0, 10),
+    quotation_date: (quotation_date && String(quotation_date).slice(0, 10)) || new Date().toISOString().slice(0, 10),
     items: cleaned,
     // Hidden items are not quoted, so they do not count.
     sub_amount: visibleTotal(cleaned),
     notes: notes ? String(notes) : '',
     ...pickSections(body),
   };
+}
+
+/** Serialise JSON columns for storage. */
+function toColumns(fields) {
+  const out = {};
+  for (const [key, value] of Object.entries(fields)) {
+    out[key] = JSON_FIELDS.includes(key) ? toJson(value) : value;
+  }
+  return out;
 }
 
 async function create(req, res) {
@@ -188,22 +193,29 @@ async function create(req, res) {
   }
 
   const finalNumber = quotation_no && String(quotation_no).trim() ? String(quotation_no).trim() : await generateNumber();
-  if (await collection('quotations').findOne({ quotation_no: finalNumber })) {
+  if (await queryOne('SELECT id FROM quotations WHERE quotation_no = ?', [finalNumber])) {
     return res.status(409).json({ message: `Quotation number ${finalNumber} already exists` });
   }
 
-  const id = await nextId('quotations');
-  const doc = {
-    id,
+  const columns = toColumns({
     quotation_no: finalNumber,
     customer_id: customer_id ? numericId(customer_id) : null,
     ...recordFields(req.body),
     created_at: now(),
     updated_at: now(),
-  };
+  });
 
-  await collection('quotations').insertOne(doc);
-  res.status(201).json(doc);
+  try {
+    const names = Object.keys(columns);
+    const result = await execute(
+      `INSERT INTO quotations (${names.join(', ')}) VALUES (${names.map(() => '?').join(', ')})`,
+      names.map((name) => columns[name])
+    );
+    res.status(201).json(await findQuotation(result.insertId));
+  } catch (err) {
+    if (isDuplicateError(err)) return res.status(409).json({ message: `Quotation number ${finalNumber} already exists` });
+    throw err;
+  }
 }
 
 async function update(req, res) {
@@ -213,41 +225,45 @@ async function update(req, res) {
     return res.status(400).json({ message: 'Company name is required' });
   }
 
-  const filter = findFilter(req.params.id);
-  const existing = await collection('quotations').findOne(filter);
+  const existing = await findQuotation(req.params.id);
   if (!existing) return res.status(404).json({ message: 'Quotation not found' });
 
-  const updateFields = { ...recordFields(req.body), updated_at: now() };
+  const fields = { ...recordFields(req.body), updated_at: now() };
 
   if (quotation_no && String(quotation_no).trim()) {
     const nextNo = String(quotation_no).trim();
     if (nextNo !== existing.quotation_no) {
-      const clash = await collection('quotations').findOne({ quotation_no: nextNo, id: { $ne: existing.id } });
+      const clash = await queryOne('SELECT id FROM quotations WHERE quotation_no = ? AND id <> ?', [nextNo, existing.id]);
       if (clash) return res.status(409).json({ message: `Quotation number ${nextNo} already exists` });
     }
-    updateFields.quotation_no = nextNo;
+    fields.quotation_no = nextNo;
   }
-  if (customer_id !== undefined) updateFields.customer_id = customer_id ? numericId(customer_id) : null;
+  if (customer_id !== undefined) fields.customer_id = customer_id ? numericId(customer_id) : null;
 
-  await collection('quotations').updateOne({ id: existing.id }, { $set: updateFields });
-  const quotation = await collection('quotations').findOne({ id: existing.id });
-  res.json(quotation);
+  const columns = toColumns(fields);
+  const names = Object.keys(columns);
+  try {
+    await execute(`UPDATE quotations SET ${names.map((name) => `${name} = ?`).join(', ')} WHERE id = ?`, [...names.map((name) => columns[name]), existing.id]);
+  } catch (err) {
+    if (isDuplicateError(err)) return res.status(409).json({ message: `Quotation number ${fields.quotation_no} already exists` });
+    throw err;
+  }
+  res.json(await findQuotation(existing.id));
 }
 
 async function remove(req, res) {
-  const filter = findFilter(req.params.id);
-  const result = await collection('quotations').deleteOne(filter);
-  if (!result.deletedCount) return res.status(404).json({ message: 'Quotation not found' });
+  const existing = await findQuotation(req.params.id);
+  if (!existing) return res.status(404).json({ message: 'Quotation not found' });
+  await execute('DELETE FROM quotations WHERE id = ?', [existing.id]);
   res.json({ success: true, message: 'Quotation deleted successfully' });
 }
 
 async function getPdf(req, res) {
-  const filter = findFilter(req.params.id);
-  const quotation = await collection('quotations').findOne(filter);
+  const quotation = await findQuotation(req.params.id);
   if (!quotation) return res.status(404).json({ message: 'Quotation not found' });
 
   // Any edit bumps updated_at, so an edited quotation never serves a stale PDF.
-  const cacheKey = `q:${quotation._id}:${quotation.updated_at || quotation.created_at || ''}`;
+  const cacheKey = `q:${quotation.id}:${quotation.updated_at || quotation.created_at || ''}`;
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="quotation-${quotation.quotation_no || quotation.id}.pdf"`);

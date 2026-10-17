@@ -8,6 +8,7 @@ import { errorMessage, useToast } from '../../hooks/ToastContext';
 import DataTable from '../../components/common/DataTable';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import Modal from '../../components/common/Modal';
+import PasswordInput from '../../components/common/PasswordInput';
 import { EditIcon, PauseIcon, PlayIcon, PlusIcon, SpinnerIcon, TrashIcon } from '../../components/common/Icons';
 
 export default function ManageUsers() {
@@ -167,7 +168,7 @@ export default function ManageUsers() {
             </div>
             <div className="form-field">
               <label>New password</label>
-              <input type="password" value={editForm.password} autoComplete="new-password"
+              <PasswordInput value={editForm.password} autoComplete="new-password"
                 onChange={(e) => setEditForm((f) => ({ ...f, password: e.target.value }))}
                 placeholder="Leave blank to keep current" />
             </div>

@@ -12,3 +12,13 @@ Thumbs.db
 # IDE / session settings
 .claude/
 .agents/
+
+# Local env files for the client (VITE_API_URL etc.)
+client/.env
+client/.env.local
+client/.env.production
+client/.env.*.local
+
+# Database CA certificates downloaded for local testing
+server/certs/
+*.pem

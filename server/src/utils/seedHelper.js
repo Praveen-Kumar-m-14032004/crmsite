@@ -1,6 +1,5 @@
 const bcrypt = require('bcryptjs');
-const { getDb } = require('../config/db');
-const { now, syncCounter } = require('./mongo');
+const { query, queryOne, execute, now } = require('./db');
 const { backfillGstOnly } = require('./gst');
 
 const ADMIN_ROLE_ID = 1;
@@ -10,7 +9,7 @@ const permissionRows = [
   ['customers.view', 'customers', 'view'], ['customers.create', 'customers', 'create'], ['customers.edit', 'customers', 'edit'], ['customers.delete', 'customers', 'delete'],
   ['products.view', 'products', 'view'], ['products.create', 'products', 'create'], ['products.edit', 'products', 'edit'], ['products.delete', 'products', 'delete'],
   ['invoices.view', 'invoices', 'view'], ['invoices.create', 'invoices', 'create'], ['invoices.edit', 'invoices', 'edit'], ['invoices.delete', 'invoices', 'delete'], ['invoices.print', 'invoices', 'print'],
-  // GST-only scope: same actions, but confined to invoices that carry the GST line item.
+  // GST-only scope: same actions, but confined to invoices made up of GST lines only.
   ['gst_invoices.view', 'gst_invoices', 'view'], ['gst_invoices.create', 'gst_invoices', 'create'], ['gst_invoices.edit', 'gst_invoices', 'edit'], ['gst_invoices.delete', 'gst_invoices', 'delete'], ['gst_invoices.print', 'gst_invoices', 'print'],
   ['reports.view', 'reports', 'view'], ['reports.export', 'reports', 'export'], ['users.manage', 'users', 'manage'], ['roles.manage', 'roles', 'manage'], ['settings.manage', 'settings', 'manage'], ['dashboard.view', 'dashboard', 'view'],
   ['quotations.view', 'quotations', 'view'], ['quotations.create', 'quotations', 'create'], ['quotations.edit', 'quotations', 'edit'], ['quotations.delete', 'quotations', 'delete'], ['quotations.print', 'quotations', 'print'],
@@ -39,141 +38,99 @@ const products = [
   'IMPORTER OF THE RECORD (USING CHOLA AS IMPORTER)', 'LICENSE (USING CHOLA LICENSE)',
 ];
 
-// Collections whose ids come from nextId(); their counters must never lag behind
-// rows that were seeded or migrated with explicit ids.
-const COUNTER_COLLECTIONS = ['roles', 'users', 'products', 'customers', 'invoices', 'invoice_items', 'quotations'];
+const defaultSettings = {
+  company_name: 'Chola Logistics Pte Ltd',
+  address: 'Blk-640, Rowell Road, #01-54, Singapore 200640',
+  tel: '+65 62917747',
+  mobile: '+65 90144400',
+  email: 'accounts@permitdeclaration.com.sg',
+  website: 'www.permitdeclaration.com.sg',
+  contact_no: '+65 96539713',
+  uen: '201835067C',
+  default_currency: 'SGD',
+};
 
-async function grantAll(db, roleId, codes, permissionIds) {
-  for (const code of codes) {
-    const pId = permissionIds.get(code);
-    if (!pId) continue;
-    await db.collection('role_permissions').updateOne(
-      { _id: `${roleId}:${pId}` },
-      { $set: { role_id: Number(roleId), permission_id: pId } },
-      { upsert: true }
-    );
-  }
+async function grantAll(roleId, codes, permissionIds) {
+  const pairs = codes.map((code) => permissionIds.get(code)).filter(Boolean).map((pId) => [roleId, pId]);
+  if (pairs.length) await execute('INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES ?', [pairs]);
 }
 
+/**
+ * Idempotent defaults: permissions, built-in roles, Admin's full grant, the
+ * default products, company settings (only when none exist) and the admin user.
+ * Safe to run on every start.
+ */
 async function seedDefaults(overrideUsername, overridePassword) {
-  const db = getDb();
-  if (!db) return;
+  // Permissions: insert the ones that do not exist yet.
+  await execute('INSERT IGNORE INTO permissions (code, module, action) VALUES ?', [permissionRows]);
 
-  const permissions = db.collection('permissions');
-  for (let index = 0; index < permissionRows.length; index += 1) {
-    const [code, module, action] = permissionRows[index];
-    const existing = await permissions.findOne({ code });
-    if (!existing) {
-      const maxDoc = await permissions.find().sort({ id: -1 }).limit(1).toArray();
-      const nextIdVal = maxDoc.length > 0 && maxDoc[0].id ? maxDoc[0].id + 1 : index + 1;
-      await permissions.insertOne({ id: nextIdVal, code, module, action });
-    }
-  }
-
+  // Built-in roles keep fixed ids so the app can refer to them.
   const insertedRoleIds = new Set();
   for (const [id, name, description, is_system] of roleRows) {
-    const result = await db.collection('roles').updateOne(
-      { id },
-      { $setOnInsert: { id, name, description, is_system, created_at: now() } },
-      { upsert: true }
-    );
-    if (result.upsertedCount) insertedRoleIds.add(id);
+    const existing = await queryOne('SELECT id FROM roles WHERE id = ? OR name = ?', [id, name]);
+    if (existing) continue;
+    await execute('INSERT INTO roles (id, name, description, is_system, created_at) VALUES (?, ?, ?, ?, ?)', [id, name, description, is_system, now()]);
+    insertedRoleIds.add(id);
   }
 
-  const permissionDocs = await permissions.find().toArray();
-  const permissionIds = new Map(permissionDocs.map((p) => [p.code, p.id]));
-
+  const permissionIds = new Map((await query('SELECT id, code FROM permissions')).map((p) => [p.code, p.id]));
   for (const [roleIdText, codes] of Object.entries(roleCodes)) {
     const roleId = Number(roleIdText);
     if (roleId === ADMIN_ROLE_ID) {
       // Admin always holds every permission, including ones added in later releases.
-      await grantAll(db, roleId, codes, permissionIds);
+      await grantAll(roleId, codes, permissionIds);
       continue;
     }
     // Other built-in roles get their defaults once. After that the matrix an admin
     // saves is the source of truth and must survive restarts.
-    const alreadyConfigured = !insertedRoleIds.has(roleId)
-      && (await db.collection('role_permissions').countDocuments({ role_id: roleId })) > 0;
-    if (!alreadyConfigured) await grantAll(db, roleId, codes, permissionIds);
+    const configured = await queryOne('SELECT COUNT(*) AS n FROM role_permissions WHERE role_id = ?', [roleId]);
+    const alreadyConfigured = !insertedRoleIds.has(roleId) && Number(configured?.n) > 0;
+    if (!alreadyConfigured) await grantAll(roleId, codes, permissionIds);
   }
 
+  // Default products: by name, with the classic ids when they are free.
   for (let index = 0; index < products.length; index += 1) {
-    await db.collection('products').updateOne(
-      { productname: products[index] },
-      { $setOnInsert: { id: index + 1, productname: products[index], created_at: now() } },
-      { upsert: true }
+    const name = products[index];
+    if (await queryOne('SELECT id FROM products WHERE productname = ?', [name])) continue;
+    const wantedId = index + 1;
+    const idTaken = await queryOne('SELECT id FROM products WHERE id = ?', [wantedId]);
+    if (idTaken) await execute('INSERT INTO products (productname, created_at) VALUES (?, ?)', [name, now()]);
+    else await execute('INSERT INTO products (id, productname, created_at) VALUES (?, ?, ?)', [wantedId, name, now()]);
+  }
+
+  // Company settings: created once, then owned by the Company Settings screen.
+  if (!(await queryOne('SELECT id FROM company_settings LIMIT 1'))) {
+    await execute(
+      `INSERT INTO company_settings (id, company_name, address, tel, mobile, email, website, contact_no, uen, default_currency, created_at, updated_at)
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [defaultSettings.company_name, defaultSettings.address, defaultSettings.tel, defaultSettings.mobile, defaultSettings.email,
+        defaultSettings.website, defaultSettings.contact_no, defaultSettings.uen, defaultSettings.default_currency, now(), now()]
     );
   }
 
-  await db.collection('company_settings').updateOne(
-    { _id: 'company_settings' },
-    {
-      $set: {
-        company_name: 'Chola Logistics Pte Ltd',
-        address: 'Blk-640, Rowell Road, #01-54, Singapore 200640',
-        tel: '+65 62917747',
-        mobile: '+65 90144400',
-        email: 'accounts@permitdeclaration.com.sg',
-        website: 'www.permitdeclaration.com.sg',
-        contact_no: '+65 96539713',
-        uen: '201835067C',
-        default_currency: 'SGD',
-        updated_at: now(),
-      },
-      $setOnInsert: { id: 1, created_at: now() },
-    },
-    { upsert: true }
-  );
-
-  const adminUsername = (overrideUsername || process.env.ADMIN_USERNAME || 'admin').trim();
-  const adminPassword = overridePassword || process.env.ADMIN_PASSWORD || 'admin';
-  const hashedPassword = await bcrypt.hash(adminPassword, 10);
-
-  const existingAdmin = await db.collection('users').findOne({
-    username: { $regex: new RegExp(`^${adminUsername}$`, 'i') },
-  });
-
-  if (existingAdmin) {
-    await db.collection('users').updateOne(
-      { _id: existingAdmin._id },
-      {
-        $set: {
-          password: hashedPassword,
-          username: adminUsername,
-          role_id: ADMIN_ROLE_ID,
-          is_active: 1,
-        },
-      }
-    );
-  } else {
-    await db.collection('users').updateOne(
-      { username: adminUsername },
-      {
-        $set: {
-          password: hashedPassword,
-          username: adminUsername,
-          role_id: ADMIN_ROLE_ID,
-          is_active: 1,
-          name: 'System Admin',
-          email: 'admin@example.com',
-          created_at: now(),
-        },
-        $setOnInsert: {
-          id: 1,
-        },
-      },
-      { upsert: true }
-    );
+  // First Admin account: created once from ADMIN_USERNAME / ADMIN_PASSWORD when no
+  // active Admin exists. An existing admin's password is never overwritten here;
+  // it is changed in Manage Users.
+  const activeAdmins = await queryOne('SELECT COUNT(*) AS n FROM users WHERE role_id = ? AND is_active = 1', [ADMIN_ROLE_ID]);
+  if (Number(activeAdmins?.n) === 0) {
+    const adminUsername = (overrideUsername || process.env.ADMIN_USERNAME || 'admin').trim();
+    const adminPassword = overridePassword || process.env.ADMIN_PASSWORD || 'admin';
+    if (adminPassword === 'admin' && process.env.NODE_ENV === 'production') {
+      console.warn('[seed] WARNING: creating the Admin account with the default password. Set ADMIN_PASSWORD and change it after first login.');
+    }
+    const hashedPassword = await bcrypt.hash(adminPassword, 10);
+    const existing = await queryOne('SELECT id FROM users WHERE username = ?', [adminUsername]);
+    if (existing) {
+      await execute('UPDATE users SET password = ?, role_id = ?, is_active = 1, updated_at = ? WHERE id = ?', [hashedPassword, ADMIN_ROLE_ID, now(), existing.id]);
+    } else {
+      await execute(
+        'INSERT INTO users (name, username, email, password, role_id, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)',
+        ['System Admin', adminUsername, 'admin@example.com', hashedPassword, ADMIN_ROLE_ID, now(), now()]
+      );
+    }
   }
 
-  // Seeded rows above bypass the id counters; bring every counter up to date so
-  // "create" never collides with an existing id.
-  for (const name of COUNTER_COLLECTIONS) {
-    await syncCounter(name);
-  }
-
-  // Invoices saved before the GST-only flag existed get it now, so GST-only
-  // accounts see exactly the invoices made up of GST lines and nothing else.
+  // Invoices saved before the GST-only flag existed get it now.
   await backfillGstOnly();
 }
 

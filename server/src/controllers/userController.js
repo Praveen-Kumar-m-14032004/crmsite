@@ -1,5 +1,5 @@
 const bcrypt = require('bcryptjs');
-const { collection, nextId, now, numericId, isDuplicateError, syncCounter } = require('../utils/mongo');
+const { query, queryOne, execute, now, numericId, isDuplicateError, likeTerm } = require('../utils/db');
 const { invalidateUserAccess, ADMIN_ROLE_ID } = require('../utils/authz');
 
 const MIN_PASSWORD = 4;
@@ -7,7 +7,7 @@ const MIN_PASSWORD = 4;
 async function roleExists(roleId) {
   const id = numericId(roleId);
   if (!id) return false;
-  return Boolean(await collection('roles').findOne({ id }, { projection: { id: 1 } }));
+  return Boolean(await queryOne('SELECT id FROM roles WHERE id = ?', [id]));
 }
 
 /**
@@ -21,8 +21,8 @@ async function wouldRemoveLastAdmin(target, change) {
     && (change.role_id === undefined || change.role_id === ADMIN_ROLE_ID)
     && (change.is_active === undefined || change.is_active === 1);
   if (staysAdmin) return false;
-  const otherAdmins = await collection('users').countDocuments({ id: { $ne: target.id }, role_id: ADMIN_ROLE_ID, is_active: 1 });
-  return otherAdmins === 0;
+  const row = await queryOne('SELECT COUNT(*) AS n FROM users WHERE id <> ? AND role_id = ? AND is_active = 1', [target.id, ADMIN_ROLE_ID]);
+  return Number(row?.n) === 0;
 }
 
 async function list(req, res) {
@@ -30,16 +30,24 @@ async function list(req, res) {
   const pageNum = Math.max(parseInt(page, 10) || 1, 1);
   const limitNum = Math.max(parseInt(limit, 10) || 10, 1);
   const offset = (pageNum - 1) * limitNum;
-  const filter = search ? { $or: ['name', 'username', 'email'].map((field) => ({ [field]: { $regex: search, $options: 'i' } })) } : {};
-  const [users, total] = await Promise.all([
-    collection('users').find(filter).sort({ created_at: -1, id: -1 }).skip(offset).limit(limitNum).toArray(),
-    collection('users').countDocuments(filter),
-  ]);
-  const roles = await collection('roles').find({ id: { $in: users.map((user) => user.role_id) } }).toArray();
-  const roleById = new Map(roles.map((role) => [role.id, role]));
-  const rows = users.map(({ password, ...user }) => ({ ...user, role_name: roleById.get(user.role_id)?.name }));
 
-  res.json({ data: rows, total, page: pageNum, limit: limitNum });
+  const term = String(search || '').trim();
+  const where = term ? 'WHERE (u.name LIKE ? OR u.username LIKE ? OR u.email LIKE ?)' : '';
+  const params = term ? [likeTerm(term), likeTerm(term), likeTerm(term)] : [];
+
+  const [rows, count] = await Promise.all([
+    query(
+      `SELECT u.id, u.name, u.username, u.email, u.role_id, u.is_active, u.created_at, u.updated_at, r.name AS role_name
+         FROM users u LEFT JOIN roles r ON r.id = u.role_id
+         ${where}
+        ORDER BY u.created_at DESC, u.id DESC
+        LIMIT ? OFFSET ?`,
+      [...params, limitNum, offset]
+    ),
+    queryOne(`SELECT COUNT(*) AS n FROM users u ${where}`, params),
+  ]);
+
+  res.json({ data: rows, total: Number(count?.n || 0), page: pageNum, limit: limitNum });
 }
 
 async function create(req, res) {
@@ -57,19 +65,11 @@ async function create(req, res) {
 
   const hash = await bcrypt.hash(password, 10);
   try {
-    await syncCounter('users');
-    const id = await nextId('users');
-    await collection('users').insertOne({
-      id,
-      name: name ? String(name).trim() : null,
-      username,
-      email: email ? String(email).trim() : null,
-      password: hash,
-      role_id: numericId(role_id),
-      is_active: 1,
-      created_at: now(),
-    });
-    res.status(201).json({ id });
+    const result = await execute(
+      'INSERT INTO users (name, username, email, password, role_id, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)',
+      [name ? String(name).trim() : null, username, email ? String(email).trim() : null, hash, numericId(role_id), now(), now()]
+    );
+    res.status(201).json({ id: result.insertId });
   } catch (err) {
     if (isDuplicateError(err)) {
       return res.status(409).json({ message: 'Username already exists' });
@@ -80,7 +80,7 @@ async function create(req, res) {
 
 async function update(req, res) {
   const id = numericId(req.params.id);
-  const target = id ? await collection('users').findOne({ id }) : null;
+  const target = id ? await queryOne('SELECT * FROM users WHERE id = ?', [id]) : null;
   if (!target) return res.status(404).json({ message: 'User not found' });
 
   const { name, email, role_id, is_active, password } = req.body;
@@ -110,21 +110,23 @@ async function update(req, res) {
     return res.status(400).json({ message: 'This is the last active Admin. Give another user the Admin role first.' });
   }
 
-  await collection('users').updateOne({ id }, { $set: { ...fields, updated_at: now() } });
+  fields.updated_at = now();
+  const columns = Object.keys(fields);
+  await execute(`UPDATE users SET ${columns.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`, [...columns.map((c) => fields[c]), id]);
   invalidateUserAccess(id);
   res.json({ message: 'User updated' });
 }
 
 async function remove(req, res) {
   const id = numericId(req.params.id);
-  const target = id ? await collection('users').findOne({ id }) : null;
+  const target = id ? await queryOne('SELECT * FROM users WHERE id = ?', [id]) : null;
   if (!target) return res.status(404).json({ message: 'User not found' });
   if (req.user?.id === id) return res.status(400).json({ message: 'You cannot delete your own account' });
   if (await wouldRemoveLastAdmin(target, { deleted: true })) {
     return res.status(400).json({ message: 'This is the last active Admin. Give another user the Admin role first.' });
   }
 
-  await collection('users').deleteOne({ id });
+  await execute('DELETE FROM users WHERE id = ?', [id]);
   invalidateUserAccess(id);
   res.json({ message: 'User deleted' });
 }

@@ -1,4 +1,4 @@
-const { collection, numericId } = require('./mongo');
+const { query, execute, numericId } = require('./db');
 
 /**
  * GST classification shared by invoices, products and the dashboard.
@@ -13,17 +13,15 @@ const { collection, numericId } = require('./mongo');
 const GST_NAME_REGEX = /^\s*gst\s*$/i;
 const isGstName = (name) => GST_NAME_REGEX.test(String(name ?? ''));
 
-// Mongo filter for invoices inside the GST-only scope.
-const GST_ONLY_FILTER = { is_gst_only: 1 };
-// Mongo filter for the product(s) a GST-only account may bill.
-const GST_PRODUCT_FILTER = { productname: GST_NAME_REGEX };
+// SQL fragment selecting the product(s) a GST-only account may bill.
+const GST_PRODUCT_WHERE = "UPPER(TRIM(productname)) = 'GST'";
 
 function isGstOnlyInvoice(doc) {
-  return doc?.is_gst_only === 1;
+  return Number(doc?.is_gst_only) === 1;
 }
 
 async function gstProductIds() {
-  const rows = await collection('products').find(GST_PRODUCT_FILTER, { projection: { id: 1 } }).toArray();
+  const rows = await query(`SELECT id FROM products WHERE ${GST_PRODUCT_WHERE}`);
   return new Set(rows.map((row) => row.id));
 }
 
@@ -42,20 +40,16 @@ async function classifyItems(items = []) {
 }
 
 /**
- * Set is_gst_only on invoices written before the flag existed. Idempotent and
- * cheap once done: it only touches invoices that do not have the field yet.
+ * Set is_gst_only on invoices that do not have it yet. Idempotent and cheap once
+ * done: it only touches invoices whose flag is NULL.
  */
 async function backfillGstOnly() {
-  const pending = await collection('invoices')
-    .find({ is_gst_only: { $exists: false } }, { projection: { id: 1 } })
-    .toArray();
+  const pending = await query('SELECT id FROM invoices WHERE is_gst_only IS NULL');
   if (!pending.length) return 0;
 
   const ids = await gstProductIds();
-  const invoiceIds = pending.map((invoice) => invoice.id);
-  const items = await collection('invoice_items')
-    .find({ invoice_id: { $in: invoiceIds } }, { projection: { invoice_id: 1, product_id: 1 } })
-    .toArray();
+  const invoiceIds = pending.map((row) => row.id);
+  const items = await query('SELECT invoice_id, product_id FROM invoice_items WHERE invoice_id IN (?)', [invoiceIds]);
 
   const linesByInvoice = new Map();
   for (const item of items) {
@@ -63,26 +57,19 @@ async function backfillGstOnly() {
     linesByInvoice.get(item.invoice_id).push(ids.has(item.product_id));
   }
 
-  await collection('invoices').bulkWrite(invoiceIds.map((id) => {
+  for (const id of invoiceIds) {
     const flags = linesByInvoice.get(id) || [];
-    return {
-      updateOne: {
-        filter: { id },
-        update: {
-          $set: {
-            is_gst_bill: flags.some(Boolean) ? 1 : 0,
-            is_gst_only: flags.length > 0 && flags.every(Boolean) ? 1 : 0,
-          },
-        },
-      },
-    };
-  }));
+    await execute('UPDATE invoices SET is_gst_bill = ?, is_gst_only = ? WHERE id = ?', [
+      flags.some(Boolean) ? 1 : 0,
+      flags.length > 0 && flags.every(Boolean) ? 1 : 0,
+      id,
+    ]);
+  }
   return invoiceIds.length;
 }
 
 module.exports = {
-  GST_ONLY_FILTER,
-  GST_PRODUCT_FILTER,
+  GST_PRODUCT_WHERE,
   isGstName,
   isGstOnlyInvoice,
   classifyItems,

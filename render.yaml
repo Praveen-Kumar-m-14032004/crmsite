@@ -1,0 +1,43 @@
+# Render Blueprint for the Permit Declaration API (free instance).
+# Dashboard: New -> Blueprint -> pick this repository. Values marked sync: false
+# are prompted for in the dashboard and never stored in git.
+services:
+  - type: web
+    name: permit-declaration-api
+    runtime: node
+    plan: free
+    region: singapore
+    rootDir: server
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 8h
+      - key: CLIENT_ORIGIN
+        sync: false # https://YOUR-PROJECT.pages.dev,https://*.YOUR-PROJECT.pages.dev
+      - key: DB_HOST
+        sync: false # mysql-xxxx.aivencloud.com
+      - key: DB_PORT
+        sync: false # Aiven shows a port like 12345, not 3306
+      - key: DB_USER
+        sync: false # least-privilege user, e.g. crm_app
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_NAME
+        sync: false # defaultdb
+      - key: DB_SSL
+        value: "true"
+      - key: DB_SSL_CA_PATH
+        value: /etc/secrets/aiven-ca.pem # add the CA as a Secret File with this name
+      - key: DB_POOL_SIZE
+        value: "5"
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_PASSWORD
+        sync: false # used only when the database has no Admin yet

@@ -260,6 +260,43 @@ h4 {
   background: var(--line-soft);
 }
 
+/* Password box with show / hide eye */
+.pw-wrap {
+  position: relative;
+}
+
+.pw-wrap input {
+  width: 100%;
+  padding-right: 42px;
+}
+
+.pw-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.pw-toggle:hover:not(:disabled) {
+  background: var(--line-soft);
+  color: var(--purple-700);
+}
+
+.pw-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Show / hide pill used by the quotation form (sections and line items) */
 .vis-toggle {
   display: inline-flex;

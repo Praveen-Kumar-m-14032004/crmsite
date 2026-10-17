@@ -4,18 +4,21 @@ A customs / freight-forwarding CRM: customers, products, invoicing and GST billi
 with role-based access and print-ready invoice PDFs.
 
 - **Frontend:** React 18 + Vite, React Router, Axios — `client/`
-- **Backend:** Node.js + Express, JWT auth, official MongoDB driver — `server/`
-- **Database:** MongoDB, configured only with `MONGODB_URI`
-- **Legacy source:** `schema.sql` documents former MySQL relationships and seed data; it is not used at runtime.
+- **Backend:** Node.js + Express, JWT auth, `mysql2` — `server/`
+- **Database:** MySQL / MariaDB (XAMPP), configured with `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`.
+  The API creates the database and all tables on first start.
 
 ---
 
+> **Deploying for free?** See [DEPLOYMENT.md](DEPLOYMENT.md) for the Cloudflare Pages +
+> Render + Aiven MySQL setup, including every environment variable and a checklist.
+
 ## Quick start
 
-### 1. Start MongoDB
+### 1. Start MySQL
 
-Use a local MongoDB replica set, MongoDB Atlas, or another MongoDB deployment that
-supports transactions. Apache is not needed.
+Open the XAMPP Control Panel and start **MySQL**. Apache is not needed. Any other
+MySQL 5.7+ / MariaDB 10.2+ server works too.
 
 ### 2. Configure the API
 
@@ -24,7 +27,8 @@ cd server
 cp .env.example .env
 ```
 
-Set `MONGODB_URI` and, when needed, `MONGODB_DB`. Set a real `JWT_SECRET`:
+The XAMPP defaults (`DB_HOST=127.0.0.1`, `DB_USER=root`, empty `DB_PASSWORD`,
+`DB_NAME=permit_declaration`) are already in the example. Set a real `JWT_SECRET`:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
@@ -40,12 +44,13 @@ npm run dev
 ```
 
 - Web app → http://localhost:5173
-- API → http://localhost:5000
+- API → http://localhost:5001 (set by `PORT` in `server/.env`)
 
 You can also run them separately with `npm run dev` inside `server/` and `client/`.
 
-For Azure App Service, configure `MONGODB_URI`, `MONGODB_DB`, `JWT_SECRET`, and
-`CLIENT_ORIGIN` as application settings. Do not put credentials in workflow files.
+For a hosted deployment, configure `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`,
+`DB_NAME`, `JWT_SECRET` and `CLIENT_ORIGIN` as application settings. Do not put
+credentials in workflow files.
 
 ---
 
@@ -61,13 +66,13 @@ taskkill /PID <pid> /F
 
 Or set a different `PORT` in `server/.env`.
 
-**`Cannot reach MongoDB`**
-Check `MONGODB_URI`, network access, and that the deployment supports replica-set
-transactions. The API health endpoint is `GET /api/health`.
+**`Cannot reach MySQL`**
+Start MySQL in the XAMPP Control Panel and check `DB_HOST`, `DB_PORT`, `DB_USER`,
+`DB_PASSWORD` and `DB_NAME` in `server/.env`. The API health endpoint is `GET /api/health`.
 
 **Login says "Cannot reach the server"**
 The API isn't running. Start it with `npm run dev` from the project root and check the
-terminal for `[api] Permit Declaration API listening on http://localhost:5000`.
+terminal for `[api] Permit Declaration API listening on http://localhost:5001`.
 
 ---
 
@@ -80,6 +85,21 @@ terminal for `[api] Permit Declaration API listening on http://localhost:5000`.
 | **Sales** | Full customers, view products, read-only invoices |
 | **Viewer** | Read-only everywhere, plus report export |
 | **Supervisor** | GST invoices only (view, create, edit, delete, print) plus the dashboard |
+
+### Login accounts
+
+| Role | Username (ID) | Password | Notes |
+|---|---|---|---|
+| **Admin** | `admin` | `admin` | Default from `ADMIN_USERNAME` / `ADMIN_PASSWORD` in `server/.env`. Created automatically on first start. **Change it before going live.** |
+| **Supervisor** | `Supervisor` | set by Admin | Existing account (Vicky). The password is the one entered when the user was created; an Admin can set a new one under **User Management → Manage Users → Edit**. |
+| **Accountant** | — | — | No account yet. Create one under **User Management → Add User** and pick the Accountant role. |
+| **Sales** | — | — | No account yet. Create one the same way with the Sales role. |
+| **Viewer** | — | — | No account yet. Create one the same way with the Viewer role. |
+
+Passwords are stored hashed and cannot be read back; if one is lost, an Admin resets it
+from **Manage Users → Edit → New password**. Login is at `/login`; usernames are not
+case-sensitive. To change the Admin password, either edit it in Manage Users or set
+`ADMIN_PASSWORD` in `server/.env` and restart the API (the seed updates it on start).
 
 Permissions are enforced in the API by `requirePermission()` on every route, and mirrored
 in the UI (hidden menu items and disabled actions). Admins can create custom roles and
@@ -106,20 +126,22 @@ Everything in the letterhead — company name, address, phone, email, website, U
 PayNow payee and currency — comes from **Company Settings**, so update that screen
 rather than editing code. The printed number is always the stored `invoice_no`.
 
-## Existing MySQL data
+## Moving data from the old MongoDB
 
-The migration is explicit and idempotent. Configure the legacy `DB_*` variables only
-for this command, alongside `MONGODB_URI`, then run:
+The app used MongoDB before October 2026. To copy everything from that database into
+MySQL, set `MONGODB_URI` (and `MONGODB_DB`) in `server/.env`, then run:
 
 ```bash
 cd server
-npm run migrate:mysql
+npm run migrate:mongo              # into an empty MySQL database
+npm run migrate:mongo -- --replace # empty the MySQL tables first, then load
 ```
 
-It copies all legacy tables, preserves numeric IDs and relationships, and advances the
-MongoDB counters used for new records. It does not print or store connection secrets.
-For a new database, `npm run seed` creates roles, permissions, products, and company
-settings. Set `ADMIN_USERNAME` and `ADMIN_PASSWORD` only when an admin user is needed.
+It copies every table, keeps all numeric ids and relationships, only reads from
+MongoDB, and ends with a verification report (row counts, invoice totals, invoice and
+quotation numbers, logins). It exits with an error if anything does not match.
+For a brand-new database, `npm run seed` (or simply starting the API) creates roles,
+permissions, products, company settings and the admin user.
 
 ---
 
@@ -132,10 +154,10 @@ client/          React app
   src/hooks/     useAuth, usePermissions, useClock, useDataTable, useToast
   src/pages/     one folder per module
 server/          Express API
-  src/config/    MongoDB connection and indexes
+  src/config/    MySQL connection pool and schema (tables are created on start)
   src/middleware/  auth + requirePermission
   src/routes/    one router per resource
   src/controllers/
-  src/utils/     pdf, excel, csv builders
-schema.sql       legacy MySQL relationship and seed reference
+  src/utils/     db helpers, pdf, excel, csv builders
+  scripts/       seed.js, migrate-mongo-to-mysql.js
 ```

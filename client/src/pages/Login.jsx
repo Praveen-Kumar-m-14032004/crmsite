@@ -32,7 +32,7 @@ export default function Login() {
         status === 401
           ? 'Incorrect username or password.'
           : err.response?.data?.message
-            || 'Cannot reach the server. Make sure the API is running on port 5000.'
+            || 'Cannot reach the server. Make sure the API is running (npm run dev).'
       );
     } finally {
       setLoading(false);

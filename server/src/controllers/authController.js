@@ -1,97 +1,34 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { collection } = require('../utils/mongo');
-const { seedDefaults } = require('../utils/seedHelper');
-const { getPermissionsForRole, invalidateUserAccess, ADMIN_ROLE_ID } = require('../utils/authz');
-
-const DEFAULT_JWT_SECRET = 'permit-declaration-secret-da41d4f289e9d0410ad09455e84f577c';
+const { queryOne } = require('../utils/db');
+const { getPermissionsForRole } = require('../utils/authz');
 
 function signToken(payload) {
-  const secret = process.env.JWT_SECRET || DEFAULT_JWT_SECRET;
-  return jwt.sign(payload, secret, { expiresIn: process.env.JWT_EXPIRES_IN || '8h' });
+  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '8h' });
 }
 
+const USER_SQL = 'SELECT u.*, r.name AS role_name FROM users u LEFT JOIN roles r ON r.id = u.role_id WHERE u.username = ? LIMIT 1';
+
+/**
+ * Every account, Admin included, signs in with the password stored for it.
+ * The first Admin is created by the seeder from ADMIN_USERNAME / ADMIN_PASSWORD
+ * when no such user exists; after that the password is changed in Manage Users.
+ */
 async function login(req, res) {
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ message: 'Username and password are required' });
   }
 
-  const trimmedUsername = String(username).trim();
-  const isPlainAdminAttempt = trimmedUsername.toLowerCase() === 'admin' && password === 'admin';
-  const defaultAdminUser = (process.env.ADMIN_USERNAME || 'admin').trim();
-  const defaultAdminPass = process.env.ADMIN_PASSWORD || 'admin';
-  const isEnvAdminAttempt =
-    trimmedUsername.toLowerCase() === defaultAdminUser.toLowerCase() &&
-    password === defaultAdminPass;
-  const isAdminLoginAttempt = isPlainAdminAttempt || isEnvAdminAttempt;
-
-  if (isAdminLoginAttempt) {
-    try {
-      await seedDefaults('admin', password);
-    } catch (seedErr) {
-      console.error('[auth] auto-seed error:', seedErr);
-    }
-
-    let user = await collection('users').findOne({
-      username: { $regex: new RegExp(`^${trimmedUsername}$`, 'i') },
-    });
-
-    if (!user) {
-      const hashedPassword = await bcrypt.hash(password, 10);
-      await collection('users').updateOne(
-        { username: 'admin' },
-        {
-          $set: {
-            password: hashedPassword,
-            username: 'admin',
-            role_id: ADMIN_ROLE_ID,
-            is_active: 1,
-            name: 'System Admin',
-            email: 'admin@example.com',
-          },
-          $setOnInsert: { id: 1 },
-        },
-        { upsert: true }
-      );
-      user = await collection('users').findOne({ username: 'admin' });
-    }
-    invalidateUserAccess(user?.id);
-
-    let permissions = user ? await getPermissionsForRole(user.role_id) : [];
-    if (!permissions.length) {
-      // Defensive: the Admin role is re-granted every permission by the seeder.
-      permissions = await collection('permissions').distinct('code');
-    }
-
-    const payload = {
-      id: user?.id || 1,
-      name: user?.name || 'System Admin',
-      username: user?.username || 'admin',
-      email: user?.email || 'admin@example.com',
-      roleId: ADMIN_ROLE_ID,
-      roleName: 'Admin',
-      permissions,
-    };
-
-    return res.json({ token: signToken(payload), user: payload });
-  }
-
-  const user = await collection('users').findOne({
-    username: { $regex: new RegExp(`^${trimmedUsername}$`, 'i') },
-  });
-
-  if (!user || !user.is_active) {
+  const user = await queryOne(USER_SQL, [String(username).trim()]);
+  // Compare against a dummy hash when the user is unknown so timing does not reveal valid usernames.
+  const hash = user?.password || '$2a$10$CwTycUXWue0Thq9StjUM0uJ8ZzJ0bHdU8S0NyS7rQ7lqRzR0Zr5De';
+  const match = await bcrypt.compare(password, hash);
+  if (!user || !match || !user.is_active) {
     return res.status(401).json({ message: 'Invalid credentials' });
   }
 
-  const match = await bcrypt.compare(password, user.password);
-  if (!match) {
-    return res.status(401).json({ message: 'Invalid credentials' });
-  }
-
-  const role = await collection('roles').findOne({ id: user.role_id });
-  const permissions = role ? await getPermissionsForRole(user.role_id) : [];
+  const permissions = user.role_id ? await getPermissionsForRole(user.role_id) : [];
 
   const payload = {
     id: user.id,
@@ -99,7 +36,7 @@ async function login(req, res) {
     username: user.username,
     email: user.email,
     roleId: user.role_id,
-    roleName: role?.name,
+    roleName: user.role_name || null,
     permissions,
   };
 

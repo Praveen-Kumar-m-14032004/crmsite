@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { rolesApi, usersApi } from '../../api/endpoints';
 import { errorMessage, useToast } from '../../hooks/ToastContext';
 import { SpinnerIcon } from '../../components/common/Icons';
+import PasswordInput from '../../components/common/PasswordInput';
 
 export default function AddUser() {
   const navigate = useNavigate();
@@ -69,7 +70,7 @@ export default function AddUser() {
             </div>
             <div className="form-field">
               <label htmlFor="password">Password <span className="req">*</span></label>
-              <input id="password" type="password" value={form.password} onChange={set('password')}
+              <PasswordInput id="password" value={form.password} onChange={set('password')}
                 placeholder="Minimum 4 characters" autoComplete="new-password" required />
             </div>
             <div className="form-field">

@@ -8,6 +8,8 @@ import { AlertIcon, PlusIcon, SpinnerIcon, TrashIcon } from '../../components/co
 const ADMIN_ROLE_ID = 1;
 const ACTION_ORDER = ['view', 'view_all', 'create', 'edit', 'delete', 'print', 'export', 'manage'];
 const ACTION_LABELS = { view_all: "all users' invoices" };
+// Opt-in scope switches: no role holds them by default, and Admin may toggle them too.
+const OPTIONAL_CODES = ['invoices.view_all'];
 
 // Display order, label and a one-line hint for each permission module. Modules
 // the API adds later still render, after these, under their raw name.
@@ -85,9 +87,13 @@ export default function RolesPermissions() {
   const isAdminRole = !creating && selectedRoleId === ADMIN_ROLE_ID;
   const matrixLocked = isAdminRole;
   const allPermissionIds = useMemo(() => permissions.map((p) => p.id), [permissions]);
+  // Scope switches stay editable on Admin: Admin holds every action, but seeing other
+  // users' invoices is opt-in for every role.
+  const optionalIds = useMemo(() => new Set(permissions.filter((p) => OPTIONAL_CODES.includes(p.code)).map((p) => p.id)), [permissions]);
+  const isLocked = (permId) => matrixLocked && !optionalIds.has(permId);
 
   const toggle = (permId) => {
-    if (matrixLocked) return;
+    if (isLocked(permId)) return;
     setCheckedIds((prev) => {
       const next = new Set(prev);
       if (next.has(permId)) next.delete(permId); else next.add(permId);
@@ -217,7 +223,7 @@ export default function RolesPermissions() {
                       <input
                         type="checkbox"
                         checked={checkedIds.has(actions[a].id)}
-                        disabled={matrixLocked}
+                        disabled={isLocked(actions[a].id)}
                         onChange={() => toggle(actions[a].id)}
                         aria-label={`${meta?.label || mod} ${a}`}
                       />
@@ -358,7 +364,10 @@ export default function RolesPermissions() {
           {isAdminRole && (
             <div className="trash-banner">
               <AlertIcon width={17} height={17} style={{ color: 'var(--purple-600)', flexShrink: 0 }} />
-              <div><strong>Admin always has every permission.</strong> It cannot be restricted, so nobody can be locked out of user and role management.</div>
+              <div>
+                <strong>Admin always has every action permission.</strong> It cannot be restricted, so nobody can be locked out of user and role management.
+                {' '}Only the <strong>all users' invoices</strong> switch can be changed here: without it, Admin sees just the invoices Admin users created.
+              </div>
             </div>
           )}
 
@@ -366,7 +375,7 @@ export default function RolesPermissions() {
           {matrix}
 
           <div className="form-actions">
-            <button className="btn btn-primary" onClick={saveRole} disabled={saving || !selectedRoleId || matrixLocked}>
+            <button className="btn btn-primary" onClick={saveRole} disabled={saving || !selectedRoleId}>
               {saving ? <><SpinnerIcon width={15} height={15} /> Saving…</> : 'Save Permissions'}
             </button>
           </div>

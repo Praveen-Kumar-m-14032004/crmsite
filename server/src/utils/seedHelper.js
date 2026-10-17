@@ -26,8 +26,12 @@ const roleRows = [
   [5, 'Supervisor', 'Creates and manages their own invoices, plus the dashboard', 1],
 ];
 
+// Scope switches are opt-in for every role, Admin included: by default each role
+// sees only the invoices its own users created. An admin can grant them in the matrix.
+const OPTIONAL_CODES = ['invoices.view_all'];
+
 const roleCodes = {
-  1: permissionRows.map(([code]) => code),
+  1: permissionRows.map(([code]) => code).filter((code) => !OPTIONAL_CODES.includes(code)),
   2: ['customers.view', 'customers.create', 'customers.edit', 'products.view', 'invoices.view', 'invoices.create', 'invoices.edit', 'invoices.delete', 'invoices.print', 'quotations.view', 'quotations.create', 'quotations.edit', 'quotations.delete', 'quotations.print', 'reports.view', 'reports.export', 'dashboard.view'],
   3: ['customers.view', 'customers.create', 'customers.edit', 'products.view', 'invoices.view', 'quotations.view', 'quotations.create', 'dashboard.view'],
   4: ['customers.view', 'products.view', 'invoices.view', 'quotations.view', 'reports.view', 'reports.export', 'dashboard.view'],
@@ -57,6 +61,12 @@ async function runMigrations(permissionIds) {
         ['gst_invoices']
       );
       await grantAll(5, ['invoices.view', 'invoices.create', 'invoices.edit', 'invoices.delete', 'invoices.print', 'dashboard.view'], permissionIds);
+    },
+    // Invoices become private per creator for every role. Admin loses the automatic
+    // "all users' invoices" grant; it stays available as a switch in the matrix.
+    '2026-10-18-admin-own-invoices': async () => {
+      const viewAll = permissionIds.get('invoices.view_all');
+      if (viewAll) await execute('DELETE FROM role_permissions WHERE role_id = ? AND permission_id = ?', [ADMIN_ROLE_ID, viewAll]);
     },
   };
   for (const [name, run] of Object.entries(steps)) {
@@ -171,4 +181,4 @@ async function seedDefaults(overrideUsername, overridePassword) {
   await runMigrations(permissionIds);
 }
 
-module.exports = { seedDefaults, permissionRows, roleRows, roleCodes };
+module.exports = { seedDefaults, permissionRows, roleRows, roleCodes, OPTIONAL_CODES };

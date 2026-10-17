@@ -119,8 +119,14 @@ everywhere: list, trash, counts, view, print, email, edit, delete, restore and t
 figures. Its invoice form offers only the GST product, and saving any other line item is
 rejected by the API. Roles are re-read on every request, so a change
 saved in the matrix applies to signed-in users within about 30 seconds. Admin always holds
-every permission and cannot be restricted; built-in roles cannot be deleted; a custom role
-cannot be deleted while users are assigned to it.
+every action permission and cannot be restricted; built-in roles cannot be deleted; a custom
+role cannot be deleted while users are assigned to it.
+
+Invoices are private to the user who created them, for every role including Admin: the
+list, trash, counts, dashboard and reports only cover a user's own invoices. The
+**all users' invoices** switch in the Invoices row is the one permission Admin does not hold
+by default; tick it on a role (Admin included) to let that role see and manage everyone's
+invoices.
 
 ---
 

@@ -1,5 +1,6 @@
 const { query, queryOne, execute, withTransaction, now, numericId, isDuplicateError } = require('../utils/db');
 const { invalidateRoleAccess, ADMIN_ROLE_ID } = require('../utils/authz');
+const { OPTIONAL_CODES } = require('../utils/seedHelper');
 
 const MAX_NAME = 40;
 const MAX_DESCRIPTION = 200;
@@ -91,9 +92,11 @@ async function update(req, res) {
   if (error) return res.status(400).json({ message: error });
 
   if (id === ADMIN_ROLE_ID) {
-    // Restricting Admin could lock everyone out of user and role management.
-    const total = await queryOne('SELECT COUNT(*) AS n FROM permissions');
-    if (permissionIds.length !== Number(total?.n)) {
+    // Restricting Admin could lock everyone out of user and role management. Only
+    // the opt-in scope switches (e.g. "all users' invoices") may be toggled on Admin.
+    const required = await query('SELECT id FROM permissions WHERE code NOT IN (?)', [OPTIONAL_CODES]);
+    const chosen = new Set(permissionIds);
+    if (!required.every((p) => chosen.has(p.id))) {
       return res.status(400).json({ message: 'The Admin role always has every permission and cannot be restricted.' });
     }
   }

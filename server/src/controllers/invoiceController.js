@@ -250,7 +250,8 @@ async function list(req, res) {
   const where = conditions.join(' AND ');
 
   const [rows, count, totalTrashCount, totalActive] = await Promise.all([
-    query(`SELECT ${LIST_COLUMNS} ${from} WHERE ${where} ORDER BY ${sortCol} ${sortDir}, i.id ${sortDir} LIMIT ? OFFSET ?`,
+    // Same-day invoices follow their number (…-003, …-002, …-001), then id.
+    query(`SELECT ${LIST_COLUMNS} ${from} WHERE ${where} ORDER BY ${sortCol} ${sortDir}, i.invoice_no ${sortDir}, i.id ${sortDir} LIMIT ? OFFSET ?`,
       [...params, limitNum, (pageNum - 1) * limitNum]),
     queryOne(`SELECT COUNT(*) AS n ${from} WHERE ${where}`, params),
     countInvoices(true, gstScoped, owner),

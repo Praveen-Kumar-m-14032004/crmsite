@@ -10,6 +10,20 @@ PC), **Code** (already done in this repository) and **Expect** (what you should 
 Placeholders look like `YOUR-...`. Never paste real passwords, secrets or certificates
 into chat, commits or this file.
 
+> **This deployment (created 17 Oct 2026)**
+>
+> | Part | Value |
+> |---|---|
+> | Frontend (Cloudflare Pages project `permit-declaration-crm`) | https://permit-declaration-crm.pages.dev |
+> | API (Render service name must be `permit-declaration-api`) | https://permit-declaration-api.onrender.com |
+> | `VITE_API_URL` baked into the current frontend build | `https://permit-declaration-api.onrender.com/api` |
+> | `CLIENT_ORIGIN` to set on Render | `https://permit-declaration-crm.pages.dev,https://*.permit-declaration-crm.pages.dev` |
+> | Database | Aiven for **MySQL** free plan, database `defaultdb` |
+>
+> The frontend was published from this PC with `wrangler pages deploy client/dist`
+> (login with `npx wrangler login`). To publish again after a change:
+> `cd client && VITE_API_URL=https://permit-declaration-api.onrender.com/api npm run build && npx wrangler pages deploy dist --project-name permit-declaration-crm --branch main`
+
 ---
 
 ## A. Existing project structure and deployment blockers

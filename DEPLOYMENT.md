@@ -10,31 +10,20 @@ PC), **Code** (already done in this repository) and **Expect** (what you should 
 Placeholders look like `YOUR-...`. Never paste real passwords, secrets or certificates
 into chat, commits or this file.
 
-> **This deployment (created 17 Oct 2026)**
+> **Current status (18 Oct 2026): the only live copy is on Hostinger.**
 >
 > | Part | Value |
 > |---|---|
-> | Frontend (Cloudflare Pages project `permit-declaration-crm`) | https://permit-declaration-crm.pages.dev |
-> | API (Render service name must be `permit-declaration-api`) | https://permit-declaration-api.onrender.com |
-> | `VITE_API_URL` baked into the current frontend build | `https://permit-declaration-api.onrender.com/api` |
-> | `CLIENT_ORIGIN` to set on Render | `https://permit-declaration-crm.pages.dev,https://*.permit-declaration-crm.pages.dev` |
-> | Database | Aiven for **MySQL** free plan, service `crm-mysql` (Singapore, `do-sgp`), database `defaultdb`, app user `crm_app` (an Aiven service user) |
-> | Status | API live on Render and verified from the Pages origin on 17 Oct 2026 (health, admin login, CORS allowlist, dashboard, lists) |
+> | Live site (frontend + API in one Node.js web app) | https://goldenrod-echidna-551891.hostingersite.com |
+> | Database | Hostinger MySQL `u671134525_crm` on the same server |
+> | Render service `permit-declaration-api` | **Deleted** on 18 Oct 2026 |
+> | Cloudflare Pages project `permit-declaration-crm` | **Deleted** on 18 Oct 2026 |
+> | Aiven MySQL service `crm-mysql` | To be deleted from the Aiven console (data already copied to Hostinger) |
+> | Azure deploy workflows in `.github/workflows` | Removed; they failed on every push |
 >
-> Note on Aiven API tokens: they return `<redacted>` for every password, so the
-> `avnadmin` password cannot be read by scripts. The app therefore uses the
-> `crm_app` service user whose password was set through the API. To narrow its
-> rights, run the F.4 `GRANT` statements as `avnadmin` from the Aiven console.
->
-> **Pushing to GitHub does not redeploy the API yet.** The Render service was first
-> connected through another GitHub account, so Render receives no push events for
-> `crmsite`. After each push either click **Manual Deploy → Deploy latest commit** in
-> the Render dashboard, or connect your GitHub account under Render → Account
-> Settings → Git Providers and re-link the repository so auto-deploy works.
->
-> The frontend was published from this PC with `wrangler pages deploy client/dist`
-> (login with `npx wrangler login`). To publish again after a change:
-> `cd client && VITE_API_URL=https://permit-declaration-api.onrender.com/api npm run build && npx wrangler pages deploy dist --project-name permit-declaration-crm --branch main`
+> See **section M** for the Hostinger setup. Sections B to L describe the earlier
+> Render + Cloudflare Pages + Aiven layout and are kept as a reference for rebuilding
+> a free-tier copy; nothing in them is running any more.
 
 ---
 

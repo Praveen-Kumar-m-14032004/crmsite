@@ -10,8 +10,9 @@ with role-based access and print-ready invoice PDFs.
 
 ---
 
-> **Deploying for free?** See [DEPLOYMENT.md](DEPLOYMENT.md) for the Cloudflare Pages +
-> Render + Aiven MySQL setup, including every environment variable and a checklist.
+> **Live site:** https://goldenrod-echidna-551891.hostingersite.com (Hostinger, one Node.js
+> web app serving the API and the frontend). See [DEPLOYMENT.md](DEPLOYMENT.md) section M
+> for the Hostinger setup and every environment variable.
 
 ## Quick start
 

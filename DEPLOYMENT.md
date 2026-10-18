@@ -367,6 +367,7 @@ Run after both sites are live. Items marked **verified locally** were executed b
 | First request takes ~1 minute | Render free spin-down | — | Expected; optionally ping `/health` every 10 min with a free uptime monitor |
 | Aiven service "Powered off" | No activity for a while | Aiven console | Click **Power on**; data is kept |
 | 429 on login | Rate limit | — | Wait 15 minutes |
+| Exited with status 1 after retry logs | DB unreachable after 5 retries (2s→32s backoff) | Render → Logs: `[db] connection attempt N/5 failed` | Check Aiven status, redeploy. Increase retries with `DB_CONNECT_RETRIES` env var |
 
 ---
 

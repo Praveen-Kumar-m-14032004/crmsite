@@ -168,25 +168,45 @@ app.use((err, _req, res, _next) => {
 
 const PORT = Number(process.env.PORT) || 5000;
 
-async function start() {
-  try {
-    await connect();
-    await getPool().query('SELECT 1');
-    const { host, port, ssl } = dbConfig();
-    console.log(`[db] connected to MySQL database ${databaseName()} at ${host}:${port}${ssl ? ' (TLS)' : ''}`);
+const MAX_DB_RETRIES = Number(process.env.DB_CONNECT_RETRIES) || 5;
+const BASE_RETRY_DELAY_MS = 2000;
 
+async function connectWithRetry() {
+  let lastErr;
+  for (let attempt = 1; attempt <= MAX_DB_RETRIES; attempt++) {
     try {
-      const { seedDefaults } = require('./src/utils/seedHelper');
-      await seedDefaults();
-      console.log('[seed] default roles, permissions, settings and admin user verified');
-    } catch (seedErr) {
-      console.warn('[seed] warning: auto-seed had error:', seedErr.message);
+      await connect();
+      await getPool().query('SELECT 1');
+      const { host, port, ssl } = dbConfig();
+      console.log(`[db] connected to MySQL database ${databaseName()} at ${host}:${port}${ssl ? ' (TLS)' : ''}`);
+      return; // success
+    } catch (err) {
+      lastErr = err;
+      if (attempt < MAX_DB_RETRIES) {
+        const delay = BASE_RETRY_DELAY_MS * Math.pow(2, attempt - 1); // 2s, 4s, 8s, 16s, 32s
+        console.warn(`[db] connection attempt ${attempt}/${MAX_DB_RETRIES} failed (${err.code || err.message}). Retrying in ${delay / 1000}s...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        // Reset the pool so the next connect() call creates a fresh one.
+        try { await close(); } catch { /* pool may not exist */ }
+      }
     }
-  } catch (err) {
-    console.error('\n[db] Could not connect to MySQL.');
-    console.error(`     ${err.code || ''} ${err.message}`);
-    console.error('     Check DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME (and DB_SSL / DB_SSL_CA_PATH for hosted MySQL).\n');
-    process.exit(1);
+  }
+  // All retries exhausted.
+  console.error('\n[db] Could not connect to MySQL after ' + MAX_DB_RETRIES + ' attempts.');
+  console.error(`     ${lastErr.code || ''} ${lastErr.message}`);
+  console.error('     Check DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME (and DB_SSL / DB_SSL_CA_PATH for hosted MySQL).\n');
+  process.exit(1);
+}
+
+async function start() {
+  await connectWithRetry();
+
+  try {
+    const { seedDefaults } = require('./src/utils/seedHelper');
+    await seedDefaults();
+    console.log('[seed] default roles, permissions, settings and admin user verified');
+  } catch (seedErr) {
+    console.warn('[seed] warning: auto-seed had error:', seedErr.message);
   }
 
   const server = app.listen(PORT, '0.0.0.0', () => {

@@ -418,3 +418,56 @@ Free-tier limits to remember: Render 750 h/month and 15-minute spin-down; Aiven 
 | 13 | Run checklist I on the live URLs | Requires user action |
 | 14 | Rotate old MongoDB credential, change Admin password, create demo users | Requires user action |
 | 15 | Disable/delete Azure workflows | Not started (optional) |
+
+---
+
+## M. Hostinger web hosting (single Node.js web app)
+
+Hostinger's **Business** and **Cloud** web hosting plans run Node.js web apps from hPanel
+(Websites → Add Website → Node.js web app). Premium and Single plans do not. The CRM runs
+there as **one** app: the API serves the built React client from `client/dist`, so no
+second site, no CORS and no `VITE_API_URL` are needed. The plan's own MySQL replaces Aiven.
+
+Why this is attractive: no cold starts (Render free sleeps after 15 minutes), the database
+is on the same server, and outgoing SMTP works, so "Email invoice" works again.
+
+### Settings the app needs
+
+| Setting | Value |
+|---|---|
+| Node.js version | 22 |
+| Framework | Express (server app) |
+| Root directory | repository root (where the root `package.json` is) |
+| Build command | `npm run build` (installs client + server deps, builds the client) |
+| Entry file | `server/server.js` |
+| Environment variables | `NODE_ENV=production`, `APP_TIMEZONE=Asia/Singapore`, `DB_HOST=127.0.0.1`, `DB_PORT=3306`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` (from hPanel → Databases), `DB_SSL=false`, `JWT_SECRET` (long random), `JWT_EXPIRES_IN=8h`, `CLIENT_ORIGIN=https://<your-domain>`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` |
+
+Use `127.0.0.1`, not `localhost`, for `DB_HOST`: Node resolves `localhost` to IPv6 and the
+MySQL grant only covers the IPv4 loopback. The app listens on the `PORT` Hostinger injects.
+
+### Two ways to deploy
+
+1. **hPanel, manual.** Connect GitHub once (Websites → Manage → Advanced → Git), add the
+   Node.js web app from the `crmsite` repository with the settings above, create a MySQL
+   database under Databases → Management, paste the variables, Deploy. Every push to
+   `main` then redeploys automatically.
+2. **Hostinger API, scripted.** Create an API token at
+   <https://hpanel.hostinger.com/profile/api>. The API can create the database, write the
+   environment variables, upload the code (or build from the connected GitHub account),
+   start the build, stream build and runtime logs and open a temporary remote-MySQL
+   connection for the data import. Keep the token out of the repository and out of chat
+   logs; revoke it when done.
+
+### Moving the data
+
+Export the current database (Aiven or XAMPP) to a `.sql` file and import it in phpMyAdmin
+(hPanel → Databases → phpMyAdmin) **before** the first start, or let the app create an
+empty schema and import afterwards. The app's startup only adds missing tables and
+columns; it never drops data.
+
+### After the first start
+
+- `https://<your-domain>/health` must return `{"status":"ok","database":"mysql"}`.
+- Log in as `admin`, change the password, check Roles & Permissions and one invoice PDF.
+- Point the Cloudflare Pages site at the new API or retire it, and delete the Render
+  service and the Aiven database once the Hostinger copy is confirmed.

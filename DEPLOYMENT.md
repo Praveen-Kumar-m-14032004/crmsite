@@ -465,6 +465,19 @@ Export the current database (Aiven or XAMPP) to a `.sql` file and import it in p
 empty schema and import afterwards. The app's startup only adds missing tables and
 columns; it never drops data.
 
+### Deployed on 18 Oct 2026
+
+Live at <https://goldenrod-echidna-551891.hostingersite.com> (Business-tier plan, Node.js 22,
+database `u671134525_crm`, data imported from the Aiven copy). The build was started through
+the API from an uploaded archive of the repository; the hPanel Git integration on that
+account is connected to a different GitHub user, so pushes do not redeploy automatically.
+To redeploy: upload a fresh archive and start a build again (or connect the repository's
+GitHub account under Websites → Manage → Advanced → Git and add the app from Git once).
+
+Important: Hostinger applies the environment variables during the build as well, so
+`NODE_ENV=production` would make npm skip dev dependencies. The root `build` script
+therefore installs the client with `--include=dev`.
+
 ### After the first start
 
 - `https://<your-domain>/health` must return `{"status":"ok","database":"mysql"}`.

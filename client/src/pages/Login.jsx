@@ -107,10 +107,6 @@ export default function Login() {
           <button className="btn btn-primary btn-block" type="submit" disabled={loading} style={{ marginTop: 26 }}>
             {loading ? <><SpinnerIcon width={16} height={16} /> Signing in…</> : 'Sign in'}
           </button>
-
-          <div className="login-hint">
-            Demo account — <code>admin</code> / <code>admin</code>
-          </div>
         </form>
       </main>
     </div>

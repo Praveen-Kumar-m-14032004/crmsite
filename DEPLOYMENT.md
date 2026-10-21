@@ -14,7 +14,7 @@ into chat, commits or this file.
 >
 > | Part | Value |
 > |---|---|
-> | Live site (frontend + API in one Node.js web app) | https://goldenrod-echidna-551891.hostingersite.com |
+> | Live site (frontend + API in one Node.js web app) | https://cholacrm.com (the temporary `goldenrod-echidna-551891.hostingersite.com` name was replaced by this domain on 20 Oct 2026) |
 > | Database | Hostinger MySQL `u671134525_crm` on the same server |
 > | Render service `permit-declaration-api` | **Deleted** on 18 Oct 2026 |
 > | Cloudflare Pages project `permit-declaration-crm` | **Deleted** on 18 Oct 2026 |
@@ -456,8 +456,10 @@ columns; it never drops data.
 
 ### Deployed on 18 Oct 2026
 
-Live at <https://goldenrod-echidna-551891.hostingersite.com> (Business-tier plan, Node.js 22,
-database `u671134525_crm`, data imported from the Aiven copy). The build was started through
+Live at <https://cholacrm.com> (Business-tier plan, Node.js 22, database `u671134525_crm`,
+data imported from the Aiven copy; first published under the temporary
+`goldenrod-echidna-551891.hostingersite.com` name, moved to `cholacrm.com` on 20 Oct 2026).
+`CLIENT_ORIGIN` is `https://cholacrm.com,https://www.cholacrm.com`. The build was started through
 the API from an uploaded archive of the repository; the hPanel Git integration on that
 account is connected to a different GitHub user, so pushes do not redeploy automatically.
 To redeploy: upload a fresh archive and start a build again (or connect the repository's

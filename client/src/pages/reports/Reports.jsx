@@ -219,6 +219,7 @@ export default function Reports() {
                   <th>Invoice No</th>
                   <th>Invoice Date</th>
                   <th>Company Name</th>
+                  <th style={{ minWidth: 220 }}>Description</th>
                   <th style={{ textAlign: 'right' }}>Sub Amount</th>
                   <th style={{ textAlign: 'center' }}>Status</th>
                 </tr>
@@ -226,7 +227,7 @@ export default function Reports() {
               <tbody>
                 {results.data.length === 0 ? (
                   <tr>
-                    <td colSpan={5} style={{ borderBottom: 'none' }}>
+                    <td colSpan={6} style={{ borderBottom: 'none' }}>
                       <div className="empty-state">
                         <span className="empty-icon"><InvoiceIcon width={26} height={26} /></span>
                         <h4>No matching invoices</h4>
@@ -239,6 +240,7 @@ export default function Reports() {
                     <td><span className="cell-strong">#{r.invoice_no}</span></td>
                     <td className="num">{formatDateDMY(r.invoice_date)}</td>
                     <td>{r.companyname}</td>
+                    <td style={{ whiteSpace: 'pre-line', fontSize: 12.5, lineHeight: 1.4 }}>{r.description || <span className="text-muted">–</span>}</td>
                     <td className="num" style={{ textAlign: 'right' }}>{Number(r.sub_amount).toFixed(2)}</td>
                     <td style={{ textAlign: 'center' }}><span className="badge badge-neutral">{(!r.status || String(r.status).toLowerCase() === 'pending') ? 'Unpaid' : r.status}</span></td>
                   </tr>

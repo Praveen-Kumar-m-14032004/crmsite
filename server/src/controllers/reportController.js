@@ -48,8 +48,26 @@ async function runQuery(filters, limit, ownerId) {
     ),
   ]);
 
+  // Line descriptions per invoice (one line each, in item order), so the report shows
+  // what every invoice was for. Fetched separately: GROUP_CONCAT would truncate silently.
+  const descriptions = new Map();
+  if (rows.length) {
+    const items = await query(
+      'SELECT invoice_id, description FROM invoice_items WHERE invoice_id IN (?) ORDER BY invoice_id, id',
+      [rows.map((r) => r.id)]
+    );
+    for (const item of items) {
+      const text = String(item.description || '').trim();
+      if (!text) continue;
+      const list = descriptions.get(item.invoice_id) || [];
+      if (!list.includes(text)) list.push(text);
+      descriptions.set(item.invoice_id, list);
+    }
+  }
+
   const mappedRows = rows.map((r) => ({
     ...r,
+    description: (descriptions.get(r.id) || []).join('\n'),
     status: (r.status && String(r.status).toLowerCase() === 'pending') ? 'Unpaid' : (r.status || 'Unpaid'),
   }));
   const count = Number(totals?.count || 0);

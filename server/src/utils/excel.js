@@ -6,7 +6,7 @@ const { reportHeader } = require('./reportMeta');
 const LOGO_PATH = path.join(__dirname, '..', 'assets', 'logo.png');
 const PURPLE = 'FF6D2475';
 const MUTED = 'FF717684';
-const COLUMN_COUNT = 5;
+const COLUMN_COUNT = 6;
 
 /* ---- Read the logo once at module load, with its pixel size for scaling ---- */
 let logo = null;
@@ -99,7 +99,8 @@ async function buildReportExcel(rows, summary, context = {}) {
   sheet.columns = [
     { width: 20 },
     { width: 16 },
-    { width: 36 },
+    { width: 32 },
+    { width: 48 },
     { width: 18 },
     { width: 16 },
   ];
@@ -107,7 +108,7 @@ async function buildReportExcel(rows, summary, context = {}) {
   addLetterhead(workbook, sheet, reportHeader(rows, context));
 
   // Table Headers
-  const headers = ['Invoice No', 'Invoice Date', 'Company Name', 'Sub Amount', 'Status'];
+  const headers = ['Invoice No', 'Invoice Date', 'Company Name', 'Description', 'Sub Amount', 'Status'];
   const headerRow = sheet.addRow(headers);
   headerRow.height = 25;
 
@@ -125,7 +126,7 @@ async function buildReportExcel(rows, summary, context = {}) {
     };
     cell.alignment = {
       vertical: 'middle',
-      horizontal: colNum === 4 ? 'right' : colNum === 5 ? 'center' : 'left',
+      horizontal: colNum === 5 ? 'right' : colNum === 6 ? 'center' : 'left',
     };
     cell.border = {
       top: { style: 'thin', color: { argb: PURPLE } },
@@ -138,14 +139,18 @@ async function buildReportExcel(rows, summary, context = {}) {
   // Data Rows
   rows.forEach((r, idx) => {
     const isEven = idx % 2 === 0;
+    const description = String(r.description || '');
     const row = sheet.addRow([
       r.invoice_no,
       String(r.invoice_date).slice(0, 10),
       r.companyname,
+      description,
       Number(r.sub_amount) || 0,
       (!r.status || String(r.status).toLowerCase() === 'pending') ? 'Unpaid' : r.status,
     ]);
-    row.height = 20;
+    // One line per invoice item; grow the row so every description line stays visible.
+    const descriptionLines = description ? description.split('\n').length : 1;
+    row.height = Math.max(20, 15 * descriptionLines + 5);
 
     row.eachCell((cell, colNum) => {
       cell.font = { name: 'Arial', size: 9.5, color: { argb: 'FF343A40' } };
@@ -160,11 +165,13 @@ async function buildReportExcel(rows, summary, context = {}) {
         right: { style: 'thin', color: { argb: 'FFE9ECEF' } },
       };
 
-      if (colNum === 4) {
+      if (colNum === 5) {
         cell.numFmt = '#,##0.00';
         cell.alignment = { vertical: 'middle', horizontal: 'right' };
-      } else if (colNum === 5) {
+      } else if (colNum === 6) {
         cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      } else if (colNum === 4) {
+        cell.alignment = { vertical: 'top', horizontal: 'left', wrapText: true };
       } else {
         cell.alignment = { vertical: 'middle', horizontal: 'left' };
       }
@@ -176,7 +183,7 @@ async function buildReportExcel(rows, summary, context = {}) {
     ? Number(summary.totalAmount)
     : rows.reduce((acc, r) => acc + (Number(r.sub_amount) || 0), 0);
 
-  const totalRow = sheet.addRow(['Total Amount', '', '', totalAmount, '']);
+  const totalRow = sheet.addRow(['Total Amount', '', '', '', totalAmount, '']);
   totalRow.height = 24;
 
   totalRow.eachCell((cell, colNum) => {
@@ -191,7 +198,7 @@ async function buildReportExcel(rows, summary, context = {}) {
       bottom: { style: 'double', color: { argb: PURPLE } },
     };
 
-    if (colNum === 4) {
+    if (colNum === 5) {
       cell.numFmt = '#,##0.00';
       cell.alignment = { vertical: 'middle', horizontal: 'right' };
     } else {

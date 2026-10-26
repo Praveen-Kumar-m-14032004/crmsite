@@ -28,7 +28,7 @@ function csvEscape(value) {
 function buildReportCsv(rows, context = {}) {
   const header = reportHeader(rows, context);
   const headers = [
-    'Invoice No', 'Invoice Date', 'Company Name', 'Sub Amount', 'Status',
+    'Invoice No', 'Invoice Date', 'Company Name', 'Description', 'Sub Amount', 'Status',
   ];
 
   const lines = [
@@ -45,6 +45,8 @@ function buildReportCsv(rows, context = {}) {
       csvEscape(r.invoice_no),
       csvEscape(String(r.invoice_date).slice(0, 10)),
       csvEscape(r.companyname),
+      // Several item descriptions are separated by "; " so each invoice stays on one CSV line.
+      csvEscape(String(r.description || '').split('\n').join('; ')),
       csvEscape(Number(r.sub_amount).toFixed(2)),
       csvEscape((!r.status || String(r.status).toLowerCase() === 'pending') ? 'Unpaid' : r.status),
     ].join(','));

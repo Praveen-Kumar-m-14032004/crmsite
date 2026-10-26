@@ -565,6 +565,7 @@ function reportPdfDefinition(rows, filters, summary) {
       { text: 'Invoice No', style: 'th', alignment: 'left', color: '#ffffff', bold: true },
       { text: 'Invoice Date', style: 'th', alignment: 'left', color: '#ffffff', bold: true },
       { text: 'Company Name', style: 'th', alignment: 'left', color: '#ffffff', bold: true },
+      { text: 'Description', style: 'th', alignment: 'left', color: '#ffffff', bold: true },
       { text: 'Sub Amount', style: 'th', alignment: 'right', color: '#ffffff', bold: true },
       { text: 'Status', style: 'th', alignment: 'center', color: '#ffffff', bold: true },
     ],
@@ -572,6 +573,7 @@ function reportPdfDefinition(rows, filters, summary) {
       { text: r.invoice_no, style: 'cell', alignment: 'left' },
       { text: formatDate(r.invoice_date), style: 'cell', alignment: 'left' },
       { text: r.companyname, style: 'cell', alignment: 'left' },
+      { text: r.description || '', style: 'cell', alignment: 'left' },
       { text: money(r.sub_amount), style: 'cell', alignment: 'right' },
       { text: (r.status && String(r.status).toLowerCase() === 'pending') ? 'Unpaid' : (r.status || ''), style: 'cell', alignment: 'center' },
     ]),
@@ -614,7 +616,7 @@ function reportPdfDefinition(rows, filters, summary) {
         ? { text: activeFilters, style: 'subtle', margin: [0, 0, 0, 12] }
         : { text: 'All invoices (no filters applied)', style: 'subtle', margin: [0, 0, 0, 12] },
       {
-        table: { headerRows: 1, widths: [130, 110, '*', 110, 90], body },
+        table: { headerRows: 1, widths: [92, 68, 150, '*', 82, 62], body },
         layout: {
           fillColor: (i) => (i === 0 ? PURPLE : null),
           hLineWidth: (i, node) => (i === 0 || i === 1 || i === node.table.body.length ? 0.75 : 0.4),

@@ -635,13 +635,16 @@ function reportPdfDefinition(rows, filters, summary) {
         ],
         margin: [0, 16, 0, 0],
       },
-      {
-        text: 'This is a system generated invoice no authorized signature needed.',
-        style: 'systemNotice',
-        alignment: 'center',
-        margin: [0, 24, 0, 0],
-      },
     ],
+    // The notice lives in the page footer: it takes no content height, so a full table
+    // never pushes it alone onto an extra page, and it appears on every page.
+    footer: () => ({
+      text: 'This is a system generated invoice no authorized signature needed.',
+      style: 'systemNotice',
+      alignment: 'center',
+      margin: [40, 0, 40, 0],
+    }),
+    pageMargins: [40, 35, 40, 50],
     styles: {
       wordmark: { fontSize: 13, bold: true, color: PURPLE, lineHeight: 1 },
       title: { fontSize: 16, bold: true, color: INK },
